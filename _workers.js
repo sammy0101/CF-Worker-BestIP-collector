@@ -1,7 +1,6 @@
-// V3.1.0 完美雲端版：
-// 1. 瀏覽器測速結果獨立儲存 (browser_fast_ips)，不被後端任務覆蓋
-// 2. 「查看本機測速結果」改為 Token 連結訪問 (支援遠端查看)
-// 3. 圖標優化：查看結果改為 📄，與測速 ⚡ 區分
+// V3.1.1 最終優化版：
+// 1. 文字微調：ITDog 按鈕與彈窗統一簡化為「🌐 ITDog 測速」
+// 2. 保留所有 V3.1.0 核心功能 (雲端同步、Token 查看、獨立存儲)
 // 需要到 CF worker 環境變數(Environment Variables)裡添加 ADMIN_PASSWORD
 
 // --- 設定區域 ---
@@ -45,7 +44,7 @@ export default {
           case '/fast-ips': return await handleGetFastIPs(env, request);
           case '/fast-ips.txt': return await handleGetFastIPsText(env, request);
           
-          // 新增：瀏覽器測速結果接口 (前端上傳)
+          // 瀏覽器測速結果接口 (前端上傳)
           case '/browser-ips.txt': return await handleGetBrowserIPsText(env, request);
 
           case '/speedtest': return await handleSpeedTest(request, env);
@@ -89,7 +88,7 @@ export default {
   // --- HTML 頁面 ---
   async function serveHTML(env, request) {
     const data = await getStoredIPs(env);
-    const speedData = await getStoredSpeedIPs(env); // 後端測速數據
+    const speedData = await getStoredSpeedIPs(env); 
     const fastIPs = speedData.fastIPs || [];
     
     const isLoggedIn = await verifyAdmin(request, env);
@@ -107,7 +106,7 @@ export default {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloudflare 優選 IP 收集器 (V3.1.0)</title>
+    <title>Cloudflare 優選 IP 收集器 (V3.1.1)</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; background: #f8fafc; color: #334155; padding: 20px; }
@@ -216,7 +215,7 @@ export default {
         <div class="header">
             <div class="header-content">
                 <h1>Cloudflare 優選 IP 收集器</h1>
-                <p>V3.1.0</p>
+                <p>V3.1.1</p>
             </div>
             <div>
                 <a href="https://github.com/ethgan/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a>
@@ -256,11 +255,10 @@ export default {
                     </div>
                 </div>
 
-                <button class="button" onclick="openItdogModal()" style="background: #8b5cf6;">🌐 ITDog (廣東測速)</button>
+                <button class="button" onclick="openItdogModal()" style="background: #8b5cf6;">🌐 ITDog 測速</button>
                 <button class="button ${isLoggedIn ? 'button-secondary' : ''}" onclick="openTokenModal()" id="token-btn" ${!isLoggedIn ? 'disabled' : ''}>🔑 Token 管理</button>
             </div>
             
-            <!-- 日誌顯示區域 -->
             <div id="log-box" class="log-box"></div>
             
              ${isLoggedIn && tokenConfig ? `
@@ -304,8 +302,8 @@ export default {
     <!-- 模態框組件 -->
     <div class="modal" id="itdog-modal">
         <div class="modal-content">
-            <h3>🌐 ITDog (建議廣東用戶使用)</h3>
-            <p style="margin-bottom:15px; color:#475569; font-size:0.95rem;">此功能將複製「優質 IP 列表」中的 IP 地址 (約 ${FAST_IP_COUNT} 個)。請前往 ITDog 的批量 Ping/TCPing 頁面進行測試，以獲得最準確的廣東連線速度。</p>
+            <h3>🌐 ITDog 測速</h3>
+            <p style="margin-bottom:15px; color:#475569; font-size:0.95rem;">此功能將複製「優質 IP 列表」中的 IP 地址 (約 ${FAST_IP_COUNT} 個)。請前往 ITDog 的批量 Ping/TCPing 頁面進行測試，以獲得最準確的連線速度。</p>
             <div style="text-align:right;">
                 <button class="button button-secondary" onclick="document.getElementById('itdog-modal').style.display='none'">關閉</button>
                 <button class="button" onclick="copyIPsForItdog()">📋 複製優質 IP 並前往</button>
@@ -495,7 +493,6 @@ export default {
                 results.sort((a,b) => a.latency - b.latency);
                 const topResults = results.slice(0, DISPLAY_COUNT);
                 
-                // 1. 更新前端
                 const listEl = document.getElementById('ip-list');
                 let newHtml = '';
                 topResults.forEach(item => {
@@ -507,11 +504,10 @@ export default {
                 listEl.innerHTML = newHtml;
                 document.getElementById('list-title').innerHTML = '🏆 優質 IP 列表 (本地實測)';
                 
-                // 2. 上傳到後端獨立儲存區 (browser_fast_ips)
-                addLog('☁️ 正在上傳測速結果到獨立雲端存儲...', 'info');
+                addLog('☁️ 正在上傳測速結果到伺服器...', 'info');
                 try {
                     await api('/upload-results', 'POST', { fastIPs: topResults });
-                    addLog('✅ 結果已獨立保存，可通過「查看本機測速結果」訪問。', 'info');
+                    addLog('✅ 結果已同步至雲端，下次訪問將顯示此結果。', 'info');
                 } catch(e) {
                     addLog('❌ 上傳失敗: ' + e.message, 'error');
                 }
@@ -600,34 +596,30 @@ export default {
     });
   }
 
-  // 上傳前端測速結果 (寫入獨立 Key: browser_fast_ips)
   async function handleUploadResults(env, request) {
       if (!await verifyAdmin(request, env)) return jsonResponse({ error: '需要權限' }, 401);
       try {
           const { fastIPs } = await request.json();
           if (!fastIPs || !Array.isArray(fastIPs)) return jsonResponse({ error: '無效數據' }, 400);
-          
           await env.IP_STORAGE.put('browser_fast_ips', JSON.stringify({
               fastIPs: fastIPs,
               lastTested: new Date().toISOString(),
-              count: fastIPs.length
+              count: fastIPs.length,
+              source: 'browser_upload'
           }));
-          
           return jsonResponse({ success: true });
       } catch (e) {
           return jsonResponse({ error: e.message }, 500);
       }
   }
 
-  // 讀取瀏覽器測速結果文本
   async function handleGetBrowserIPsText(env, request) {
     if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401);
-    const data = await getStoredBrowserIPs(env); // 讀取獨立 Key
+    const data = await getStoredBrowserIPs(env);
     const txt = (data.fastIPs||[]).map(i => `${i.ip}#${i.colo||'UNK'}:${i.latency}ms`).join('\n');
     return new Response(txt, { headers: { 'Content-Type': 'text/plain', 'Content-Disposition': 'inline; filename="browser_speedtest.txt"' } });
   }
 
-  // 後端自動測速 (寫入 cloudflare_fast_ips)
   async function autoSpeedTestAndStore(env, ips) {
     if (!ips || !ips.length) return null;
     let randomIPs = [...ips];
@@ -652,11 +644,10 @@ export default {
     results.sort((a, b) => a.latency - b.latency);
     const fastIPs = results.slice(0, FAST_IP_COUNT);
     await env.IP_STORAGE.put('cloudflare_fast_ips', JSON.stringify({
-      fastIPs, lastTested: new Date().toISOString(), count: fastIPs.length
+      fastIPs, lastTested: new Date().toISOString(), count: fastIPs.length, source: 'backend_auto'
     }));
   }
 
-  // --- 通用函數 ---
   async function handleSpeedTest(request, env) {
     const url = new URL(request.url);
     const ip = url.searchParams.get('ip');
@@ -766,7 +757,6 @@ export default {
 
   async function getStoredIPs(env) { try { return JSON.parse(await env.IP_STORAGE.get('cloudflare_ips')) || {ips:[]}; } catch { return {ips:[]}; } }
   async function getStoredSpeedIPs(env) { try { return JSON.parse(await env.IP_STORAGE.get('cloudflare_fast_ips')) || {fastIPs:[]}; } catch { return {fastIPs:[]}; } }
-  // 新增：獲取瀏覽器測速結果
   async function getStoredBrowserIPs(env) { try { return JSON.parse(await env.IP_STORAGE.get('browser_fast_ips')) || {fastIPs:[]}; } catch { return {fastIPs:[]}; } }
   
   function expandCIDR(cidr) { try { const [ip, m] = cidr.split('/'); const mask = parseInt(m); if(isNaN(mask)||mask>32) return [ip]; if(mask===32) return [ip]; const start = ipToNum(ip); const len = Math.pow(2, 32-mask); const res = []; for(let i=0; i<(len>256?256:len); i++) res.push(numToIp(start+i)); return res; } catch { return []; } }
