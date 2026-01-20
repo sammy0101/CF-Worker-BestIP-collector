@@ -140,8 +140,10 @@ const CIDR_SOURCE_URLS = [
 
 ## 🙏 致謝 (Credits)
 
-本專案 IP 數據來源引用自：
-*   **[cmliu/cmliu](https://github.com/cmliu/cmliu)** - 感謝大佬整理與維護的 Cloudflare CIDR 列表。
+本專案基於開源社群的優秀專案進行二次開發與功能增強：
+
+*   **核心代碼基礎**：**[ethgan/CF-Worker-BestIP-collector](https://github.com/ethgan/CF-Worker-BestIP-collector)** - 感謝原作者提供的基礎 Worker 架構與思路。
+*   **IP 數據來源**：**[cmliu/cmliu](https://github.com/cmliu/cmliu)** - 感謝大佬整理與維護的 Cloudflare CIDR 列表。
 
 ---
 
