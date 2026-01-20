@@ -1,185 +1,153 @@
-# V2.5版本，添加管理员登录参数，需要到CF worker环境变量里添加 ADMIN_PASSWORD，网页增加Token管理，登陆后可用
-<img width="1339" height="575" alt="图片" src="https://github.com/user-attachments/assets/9edcd160-85ca-4d85-9344-6d3699161300" />
-<img width="1598" height="517" alt="图片" src="https://github.com/user-attachments/assets/e32a4353-6954-40c7-b0d2-01860eace439" />
-<img width="1370" height="674" alt="图片" src="https://github.com/user-attachments/assets/4a727f2d-8eb6-4edb-b9a8-d5fe68fbb2b1" />
+# Cloudflare Worker 優選 IP 收集器 (V3.1.0)
 
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange?logo=cloudflare)](https://workers.cloudflare.com/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+這是一個運行在 Cloudflare Workers 上的無伺服器腳本，用於自動收集、過濾並測試 Cloudflare 的優選 IP。
 
-# Cloudflare 优选IP 收集器
-由于GitHub版的被官方以滥用资源为理由封禁了项目，特推出基于Cloudflare worker版的优选IP，更快，更高效，更直观！抛弃github Action~
+**V3.1.0 核心特色：本地測速，雲端同步。**
+不僅擁有後端自動篩選功能，還具備瀏覽器端真實延遲測速，並能將您的本地測速結果同步至雲端 KV 儲存，隨時隨地透過 Token 訪問。
 
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=onrDa-iNJeY&pp=0gcJCRUKAYcqIYz" target="_blank">
-    <img src="https://img.icons8.com/color/48/000000/youtube-play.png" alt="YouTube" width="40" height="40"/>
-  </a>
-  &nbsp;&nbsp;
-  <a href="https://github.com/ethgan/CF-Worker-BestIP-collector" target="_blank">
-    <img src="https://img.icons8.com/ios-glyphs/48/000000/github.png" alt="GitHub" width="40" height="40"/>
-  </a>
-  &nbsp;&nbsp;
-  <a href="https://t.me/yt_hytj" target="_blank">
-    <img src="https://img.icons8.com/color/48/000000/telegram-app--v1.png" alt="Telegram" width="40" height="40"/>
-  </a>
-</p>
+---
 
-一个基于 Cloudflare Workers 的优选 CF IP 地址收集与测速工具，自动从多个公开来源收集 Cloudflare IP 地址，并提供可视化界面和测速功能。
+## 🚀 功能特點
 
-## 🌟 功能特点
+*   **雙重測速機制**：
+    *   **後端自動測速**：由 Cloudflare Edge 節點定時抓取並測試 IP 存活狀態（篩選 HTTP 200 OK）。
+    *   **⚡ 瀏覽器測速**：由用戶端（您的電腦/手機）發起測速，獲取最真實的本地延遲（Latency）。
+*   **雲端同步 (New)**：瀏覽器測速的最快 IP 結果會自動上傳至 KV 資料庫 (`browser_fast_ips`)，與後端自動抓取的資料分開儲存，互不衝突。
+*   **機房位置偵測**：自動識別 IP 連線到的 Cloudflare 機房代碼（如 `HKG`, `SJC`, `LAX`），廣東用戶可輕鬆篩選香港節點。
+*   **智慧排序與抽樣**：內建 Fisher-Yates 洗牌算法，從龐大的 IP 庫中隨機抽取 500 個進行測試，避免永遠只測到同一批 IP。
+*   **安全性管理**：
+    *   支援管理員密碼登入（支援 Enter 鍵確認）。
+    *   **Token 系統**：可生成長期有效的訪問 Token，方便腳本或第三方工具調用，支援設定過期時間。
+*   **友善介面**：
+    *   響應式網頁設計 (RWD)。
+    *   詳細的「黑色終端機風格」測速日誌。
+    *   整合 ITDog 快捷複製功能。
+    *   一鍵下載/複製優質 IP 列表。
 
-- **自动收集**：定时从多个公开来源自动收集 Cloudflare IP 地址
-- **智能测速**：内置一键测速功能，支持批量测试 IP 延迟
-- **多种格式**：支持 TXT 格式下载和原始数据获取
-- **ITDog 集成**：支持导出 IP 列表到 ITDog 进行批量 TCPing 测试
-- **现代化界面**：简洁美观的 Web 界面，支持响应式设计
-- **实时排序**：测速完成后自动按延迟排序，快速找到最优 IP
+---
 
+## 🛠️ 部署前準備
 
-## 🚀 快速开始
+1.  一個 **Cloudflare** 帳號。
+2.  開通 **Cloudflare Workers** (免費版即可)。
+3.  開通 **Workers KV** (用於儲存 IP 數據)。
 
-### 前置要求
+---
 
-- Cloudflare 账户
-- Workers 权限
-- KV 命名空间（用于存储 IP 数据）
+## 📦 部署教學
 
-### 部署步骤
+### 1. 建立 KV Namespace
+1.  登入 Cloudflare Dashboard。
+2.  前往 **Workers & Pages** -> **KV**。
+3.  點擊 **Create a Namespace**。
+4.  命名為 `IP_STORAGE` (建議)，點擊 Add。
 
-1. **克隆项目**
-   ```bash
-   git clone https://github.com/your-username/cloudflare-ip-collector.git
-   cd cloudflare-ip-collector
-   ```
+### 2. 建立 Worker
+1.  前往 **Workers & Pages** -> **Overview** -> **Create application** -> **Create Worker**。
+2.  命名您的 Worker（例如 `cf-best-ip`），點擊 Deploy。
+3.  點擊 **Edit code**。
+4.  將本專案的 `worker.js` (V3.1.0) 完整代碼複製並覆蓋原本的內容。
+5.  點擊右上角 **Save and deploy**。
 
-2. **创建 KV 命名空间**
-   - 在 Cloudflare Dashboard 中进入 Workers & Pages
-   - 创建新的 KV 命名空间，名称建议为 `IP_STORAGE`
-   - 记录下命名空间的 ID
+### 3. 綁定 KV 資料庫 (重要！)
+1.  回到 Worker 的設定頁面，點擊 **Settings** -> **Variables**。
+2.  找到 **KV Namespace Bindings**。
+3.  點擊 **Add binding**。
+4.  **Variable name** 輸入：`IP_STORAGE` (必須完全一致)。
+5.  **KV Namespace** 選擇您在第 1 步建立的資料庫。
+6.  點擊 **Save and deploy**。
 
-3. **配置 Wrangler**
-   - 复制 `wrangler.toml.example` 为 `wrangler.toml`
-   - 更新 `wrangler.toml` 中的 KV 命名空间 ID：
+### 4. 設定管理員密碼 (重要！)
+1.  在同一個 **Settings** -> **Variables** 頁面。
+2.  找到 **Environment Variables**。
+3.  點擊 **Add variable**。
+4.  **Variable name** 輸入：`ADMIN_PASSWORD`。
+5.  **Value** 輸入您想設定的密碼（例如 `123456`）。
+6.  為了安全，建議點擊 **Encrypt**。
+7.  點擊 **Save and deploy**。
 
-   ```toml
-   [[kv_namespaces]]
-   binding = "IP_STORAGE"
-   id = "your_kv_namespace_id_here"
-   ```
+### 5. 設定定時任務 (Cron Triggers)
+1.  前往 Worker 的 **Settings** -> **Triggers**。
+2.  找到 **Cron Triggers**。
+3.  點擊 **Add Cron Trigger**。
+4.  建議設定為每 4 小時或每天執行一次（例如 `0 */4 * * *`）。
+    *   *注意：後端自動更新主要用於維持 IP 庫的新鮮度。*
 
-4. **部署到 Cloudflare**
-   ```bash
-   npm install
-   npx wrangler deploy
-   ```
+---
 
-5. **配置定时任务**
-   - 在 Cloudflare Dashboard 中为 Worker 添加定时触发器
-   - 建议设置为每 12 小时运行一次
-   - 修改定时更新操作如下
-   - 登录Cloudflare Dashboard，进入Workers & Pages。
-   - 选择您部署的Worker。
-   - 点击“设置”选项卡，然后选择“触发器”。
-   - 在“Cron 触发器”部分，点击“添加 Cron 触发器”。（推荐这种 简单）
-    <img width="1920" height="913" alt="图片" src="https://github.com/user-attachments/assets/032434ca-8586-44ae-bc97-999a13d50f8f" />
+## 📖 使用指南
 
-  
-   - （另一种方式）输入Cron表达式：0 */12 * * * （每12小时执行一次）
-   - 选择时区（例如：UTC）。
-   - 点击“保存”
-   - Cron 表达式
-   - 推荐设置：0 */12 * * * （每 12 小时执行一次）
-   - 其他常用选项：
-   - 0 * * * * - 每小时执行一次
-   - 0 0 * * * - 每天午夜执行
-   - 0 */6 * * * - 每 6 小时执行一次
+### 1. 登入系統
+打開 Worker 的網址，點擊右上角的「🔓 點擊登入」，輸入您在環境變數設定的密碼。
 
-## 📖 使用方法
+### 2. 更新 IP 庫
+點擊 **「🔄 立即更新庫」**。
+*   這會觸發 Cloudflare 後端去抓取最新的 CIDR 列表。
+*   後端會進行初步的存活測試。
+*   請等待日誌顯示「更新成功」。
 
-### Web 界面
+### 3. 尋找最快 IP (推薦)
+點擊 **「⚡ 瀏覽器測速」**。
+*   系統會從庫中隨機抽取 500 個 IP。
+*   由**您的瀏覽器**直接發起連線測試（真實延遲）。
+*   測速完成後，頁面下方的 **「🏆 優質 IP 列表」** 會自動更新為您實測最快的 IP。
+*   同時，結果會自動上傳至雲端保存。
 
-访问部署后的 Worker 地址即可使用完整功能：
+### 4. 下載/分享結果
+*   **🚀 下載優質 IP**：下載後端自動篩選的 IP。
+*   **📄 查看本機測速結果**：產生一個帶 Token 的永久連結，顯示您上次瀏覽器測速上傳的結果（適合分享給手機或其他設備使用）。
 
-- **查看 IP 列表**：浏览所有收集到的 Cloudflare IP 地址
-- **一键测速**：批量测试所有 IP 的延迟，自动排序
-- **导出数据**：下载 TXT 格式的 IP 列表
-- **ITDog 集成**：复制 IP 列表到 ITDog 进行更详细的测试
+---
 
-### API 接口
+## 🔗 API 接口說明
 
-- `GET /` - 主页面
-- `GET /ips` 或 `GET /ip.txt` - 获取纯文本 IP 列表
-- `GET /raw` - 获取原始 JSON 数据
-- `POST /update` - 手动触发 IP 更新
-- `GET /speedtest?ip=<ip>` - 测试指定 IP 的速度
-- `GET /itdog-data` - 获取 ITDog 格式数据
+所有接口若未登入，需透過 Header `Authorization: Token <your_token>` 或 URL 參數 `?token=<your_token>` 訪問。
 
-## ⚙️ 配置说明
+| 方法 | 路徑 | 描述 |
+| :--- | :--- | :--- |
+| `GET` | `/` | 主頁面 (Web UI) |
+| `POST` | `/update` | 觸發後端更新 IP 庫 |
+| `POST` | `/upload-results` | 上傳瀏覽器測速結果 (JSON) |
+| `GET` | `/ips` | 下載所有已收集的 IP (純文本) |
+| `GET` | `/fast-ips.txt` | 下載後端自動測速的優質 IP |
+| `GET` | `/browser-ips.txt`| **下載/查看您上傳的本機測速優質 IP** |
+| `GET` | `/speedtest?ip=x.x.x.x` | 單一 IP 測速接口 |
 
-### 数据来源
+---
 
-项目从多个公开的 Cloudflare IP 数据源自动收集，包括：
+## ⚙️ 進階配置
 
-- ip.164746.xyz
-- ip.haogege.xyz
-- stock.hostmonit.com/CloudFlareYes
-- api.uouin.com/cloudflare.html
-- addressesapi.090227.xyz
-- www.wetest.vip
+您可以在代碼最上方修改以下變數：
 
-### 环境变量
+```javascript
+// 自定義顯示的優質 IP 數量
+const FAST_IP_COUNT = 25; 
 
-无需额外环境变量，所有配置通过代码管理。
+// 瀏覽器自動測速的樣本數量
+// 建議值：免費版 Worker 50，付費版 200-500
+const AUTO_TEST_MAX_IPS = 500; 
 
-## 🛠️ 开发
-
-### 本地开发
-
-```bash
-# 安装依赖
-npm install
-
-# 启动本地开发服务器
-npx wrangler dev
-
-# 部署到生产环境
-npx wrangler deploy
+// IP 來源 (CIDR 列表)
+const CIDR_SOURCE_URLS = [
+    'https://raw.githubusercontent.com/cmliu/cmliu/refs/heads/main/CF-CIDR.txt'
+];
 ```
 
-### 项目结构
+---
 
+## 🙏 致謝 (Credits)
+
+本專案 IP 數據來源引用自：
+*   **[cmliu/cmliu](https://github.com/cmliu/cmliu)** - 感謝大佬整理與維護的 Cloudflare CIDR 列表。
+
+---
+
+## ⚠️ 免責聲明
+
+本專案僅供學習與技術研究使用。請勿用於任何非法用途。作者不對使用本腳本產生的任何後果負責。
+
+Cloudflare 是 Cloudflare, Inc. 的商標。本專案與 Cloudflare 無任何官方關聯。
 ```
-├── cfip.js              # 主 Worker 代码
-├── wrangler.toml        # Wrangler 配置
-├── package.json         # 项目依赖
-└── README.md           # 项目说明
-```
-
-## 📊 技术栈
-
-- **运行时**：Cloudflare Workers
-- **存储**：Cloudflare KV
-- **前端**：原生 HTML/CSS/JavaScript
-- **部署**：Wrangler
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-1. Fork 本项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 创建 Pull Request
-
-## 📄 开源协议
-
-本项目基于 MIT 协议开源，详见 [LICENSE](LICENSE) 文件。
-
-## ⚠️ 免责声明
-
-本项目仅用于学习和研究目的，请勿用于商业用途或违反相关服务条款。使用者需自行承担相关风险。
-
-
-如果这个项目对你有帮助，请给个 ⭐️ 支持一下！
-## Star History
-
-
