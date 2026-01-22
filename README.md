@@ -1,25 +1,9 @@
-# Cloudflare 優選 IP 測速平台 (V3.1.4)
+# Cloudflare 優選 IP 測速平台
 
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange?logo=cloudflare)](https://workers.cloudflare.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 這是一個運行在 Cloudflare Workers 上的無伺服器應用，專為尋找最適合您網絡環境的 Cloudflare 優選 IP 而設計。
-
-**V3.1.4 核心特色：本地測速，雲端同步。**
-不僅擁有後端自動篩選功能，還具備瀏覽器端真實延遲測速，並能將您的**本地測速結果同步至雲端 KV 儲存**，隨時隨地透過 Token 訂閱/訪問。
-
----
-
-## 🚀 版本 V3.1.4 新特性
-
-*   **⚡ 瀏覽器測速與雲端同步**：由您的瀏覽器發起測速（最真實的本地延遲），結果自動上傳至 KV 資料庫 (`browser_fast_ips`)，與後端自動抓取的資料分開儲存，互不衝突。
-*   **💾 記住密碼功能**：登入畫面新增「記住密碼」選項，使用瀏覽器安全存儲，免去重複輸入的困擾。
-*   **🎨 全新 UI 交互**：
-    *   **🚀 下載中心**：整合後端優選、本機測速結果、完整 IP 庫的下載選項。
-    *   **📄 線上查看**：一鍵預覽各類 IP 列表。
-    *   **🔌 複製 API**：快速複製可用於 OpenClash / PassWall 的訂閱連結。
-*   **🌍 機房位置偵測**：自動識別 IP 連線到的 Cloudflare 機房代碼（如 `HKG`, `SJC`, `LAX`），廣東用戶可輕鬆篩選香港節點。
-*   **🛡️ 安全隱私**：未登入狀態下不讀取任何 KV 數據，確保 IP 庫不被未授權訪問。
 
 ---
 
@@ -43,7 +27,7 @@
 1.  前往 **Workers & Pages** -> **Overview** -> **Create application** -> **Create Worker**。
 2.  命名您的 Worker（例如 `cf-best-ip`），點擊 Deploy。
 3.  點擊 **Edit code**。
-4.  將本專案的 `worker.js` (V3.1.4) 完整代碼複製並覆蓋原本的內容。
+4.  將本專案的 `worker.js` 完整代碼複製並覆蓋原本的內容。
 5.  點擊右上角 **Save and deploy**。
 
 ### 3. 綁定 KV 資料庫 (重要！)
