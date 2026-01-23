@@ -1,131 +1,112 @@
-# Cloudflare 優選 IP 測速平台
+# Cloudflare 優選 IP 測速平台 (CF-IP-SpeedTest-Cloud)
 
-[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange?logo=cloudflare)](https://workers.cloudflare.com/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+基於 Cloudflare Worker 與 KV Storage 構建的自動化優選 IP 收集、測速與分發平台。
+集成了後端自動測速、瀏覽器端真實延遲測試、以及可視化的管理後台。
 
-這是一個運行在 Cloudflare Workers 上的無伺服器應用，專為尋找最適合您網絡環境的 Cloudflare 優選 IP 而設計。
+> **當前版本**: V3.1.11
 
----
+![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-3.1.11-blue)
 
-## 🛠️ 部署前準備
+## ✨ 主要功能
 
-1.  一個 **Cloudflare** 帳號。
-2.  開通 **Cloudflare Workers** (免費版即可)。
-3.  開通 **Workers KV** (用於儲存 IP 數據)。
+*   **☁️ 自動化後端更新**: 利用 Cron Triggers 定時從外部數據源 (GitHub) 拉取 IP 並在 Worker 後端進行可用性與速度測試。
+*   **⚡ 瀏覽器端測速**: 在管理後台可直接進行瀏覽器端的真實延遲測試，結果更貼近用戶實際體驗。
+*   **📡 智能路由系統**: 支援子域名路由，訪問不同子域名自動返回對應數據（無需 Token 即可公開訂閱）：
+    *   `fast.xxx`: 返回後端測速篩選的優選 IP
+    *   `browser.xxx`: 返回瀏覽器端實測的優選 IP
+    *   `all.xxx`: 返回完整的 IP 庫
+*   **🔐 安全管理後台**:
+    *   支援密碼登入保護。
+    *   Token 管理系統（用於 API 寫入權限控制）。
+    *   查看系統狀態、IP 總數、更新時間。
+*   **🔌 便捷 API 集成**: 提供純淨的 API 連結複製功能，方便導入 Surge, Clash, Sing-box 等工具。
+*   **📊 端口資訊顯示**: 主頁面清晰列出 Cloudflare 支援的 HTTP/HTTPS 端口 (V3.1.11 新增)。
+*   **💾 KV 持久化存儲**: 數據存儲在 Cloudflare KV 中，確保快速讀取。
 
----
+## 🛠️ 部署指南
 
-## 📦 部署教學
+### 1. 準備工作
+*   一個 Cloudflare 帳號
+*   一個託管在 Cloudflare 上的域名
 
-### 1. 建立 KV Namespace
-1.  登入 Cloudflare Dashboard。
-2.  前往 **Workers & Pages** -> **KV**。
-3.  點擊 **Create a Namespace**。
-4.  命名為 `IP_STORAGE` (建議)，點擊 Add。
+### 2. 創建 KV Namespace
+在 Cloudflare Dashboard 中：
+1.  進入 **Workers & Pages** -> **KV**.
+2.  創建一個新的 Namespace，命名為 `cloudflare_ips` (或其他你喜歡的名字)。
 
-### 2. 建立 Worker
-1.  前往 **Workers & Pages** -> **Overview** -> **Create application** -> **Create Worker**。
-2.  命名您的 Worker（例如 `cf-best-ip`），點擊 Deploy。
-3.  點擊 **Edit code**。
-4.  將本專案的 `worker.js` 完整代碼複製並覆蓋原本的內容。
-5.  點擊右上角 **Save and deploy**。
+### 3. 創建 Worker
+1.  創建一個新的 Worker。
+2.  將本專案的 `worker.js` 代碼完整複製進去。
+3.  在 Worker 的 **Settings** -> **Variables** 中綁定 KV：
+    *   **Variable name**: `IP_STORAGE`
+    *   **KV Namespace**: 選擇剛剛創建的 `cloudflare_ips`
 
-### 3. 綁定 KV 資料庫 (重要！)
-1.  回到 Worker 的設定頁面，點擊 **Settings** -> **Variables**。
-2.  找到 **KV Namespace Bindings**。
-3.  點擊 **Add binding**。
-4.  **Variable name** 輸入：`IP_STORAGE` (必須完全一致)。
-5.  **KV Namespace** 選擇您在第 1 步建立的資料庫。
-6.  點擊 **Save and deploy**。
+### 4. 設置環境變數
+在 Worker 的 **Settings** -> **Variables** -> **Environment Variables** 中添加：
 
-### 4. 設定管理員密碼 (重要！)
-1.  在同一個 **Settings** -> **Variables** 頁面。
-2.  找到 **Environment Variables**。
-3.  點擊 **Add variable**。
-4.  **Variable name** 輸入：`ADMIN_PASSWORD`。
-5.  **Value** 輸入您想設定的密碼（例如 `123456`）。
-6.  為了安全，建議點擊 **Encrypt**。
-7.  點擊 **Save and deploy**。
-
-### 5. 設定定時任務 (Cron Triggers)
-1.  前往 Worker 的 **Settings** -> **Triggers**。
-2.  找到 **Cron Triggers**。
-3.  點擊 **Add Cron Trigger**。
-4.  建議設定為每 4 小時或每天執行一次（例如 `0 */4 * * *`）。
-    *   *注意：後端自動更新主要用於維持 IP 庫的存活與新鮮度。*
-
----
-
-## 📖 使用指南
-
-### 1. 登入系統
-打開 Worker 的網址，點擊右上角的「🔓 點擊登入」，輸入密碼（可勾選記住密碼）。
-
-### 2. 更新 IP 庫 (後端)
-點擊 **「🔄 立即更新庫」**。
-*   Cloudflare 後端會抓取最新的 CIDR 列表並進行存活測試。
-*   這是為了確保基礎 IP 庫是新鮮的。
-
-### 3. 尋找最快 IP (前端 - 推薦)
-點擊 **「⚡ 瀏覽器測速」**。
-*   系統會從庫中隨機抽取 500 個 IP。
-*   由**您的瀏覽器**直接發起連線測試（真實延遲）。
-*   測速完成後，頁面下方的 **「🏆 優選 IP 列表」** 會自動更新，並**同步上傳至雲端**。
-
-### 4. 下載與訂閱
-*   **🚀 下載中心**：可選擇下載「後端自動優選」或「本機測速結果」的 TXT 檔。
-*   **🔌 複製 API 連結**：獲取帶 Token 的永久連結，直接填入 PassWall、OpenClash 等軟體中。
-
----
-
-## 🔗 API 接口說明
-
-所有接口若未登入，需透過 Header `Authorization: Token <your_token>` 或 URL 參數 `?token=<your_token>` 訪問。
-
-| 方法 | 路徑 | 描述 |
+| 變數名稱 | 描述 | 範例 |
 | :--- | :--- | :--- |
-| `GET` | `/` | 主頁面 (Web UI) |
-| `POST` | `/update` | 觸發後端更新 IP 庫 |
-| `POST` | `/upload-results` | 上傳瀏覽器測速結果 (JSON) |
-| `GET` | `/fast-ips.txt` | **🚀 獲取後端自動測速的優質 IP** (適合自動化) |
-| `GET` | `/browser-ips.txt`| **⚡ 獲取您本機測速上傳的優質 IP** (最推薦，真實延遲) |
-| `GET` | `/ips` | 下載所有已收集的 IP (純文本) |
+| `ADMIN_PASSWORD` | **(必填)** 管理後台的登入密碼 | `MySuperSecretPass123` |
 
-> **提示**：API 連結支援 `&format=ip` 參數，若加上此參數，輸出內容將只包含 IP (不帶備註與延遲資訊)。
+### 5. 設置觸發器 (Cron Triggers)
+為了讓後端自動更新 IP 庫，請設置定時任務：
+1.  進入 **Settings** -> **Triggers**.
+2.  點擊 **Add Cron Trigger**.
+3.  建議設置為每 4 小時或每天執行一次（例如 `0 */4 * * *`）。
+
+### 6. 設置 DNS 與子域名 (重要) 🚀
+為了啟用 **智能路由** 與 **公開 API** 功能，請在您的域名 DNS 設定中新增以下 CNAME 記錄，全部指向您的 Worker 地址 (例如 `your-worker.username.workers.dev`)：
+
+| 類型 | 名稱 (Host) | 目標 (Target) | 用途 |
+| :--- | :--- | :--- | :--- |
+| CNAME | `admin` | `your-worker.workers.dev` | 管理後台入口 |
+| CNAME | `fast` | `your-worker.workers.dev` | 獲取後端優選 IP (API) |
+| CNAME | `browser` | `your-worker.workers.dev` | 獲取本機測速結果 (API) |
+| CNAME | `all` | `your-worker.workers.dev` | 獲取完整 IP 庫 (API) |
+
+> **注意**：設定完成後，請在 Worker 的 **Settings** -> **Triggers** -> **Custom Domains** 中，將上述域名（如 `fast.yourdomain.com`）全部綁定到此 Worker。
 
 ---
 
-## ⚙️ 進階配置
+## 📖 使用說明
 
-您可以在代碼最上方修改以下變數：
+### 進入管理後台
+訪問 `https://admin.yourdomain.com` (或是您綁定的主域名)，輸入 `ADMIN_PASSWORD` 登入。
 
-```javascript
-// 自定義顯示的優質 IP 數量
-const FAST_IP_COUNT = 25; 
+*   **立即更新庫**: 手動觸發後端更新 IP 列表。
+*   **瀏覽器測速**: 點擊後會對隨機抽取的 IP 進行本地 Ping 測試。
+    *   測速完成後，結果會自動同步至雲端 (`browser.xxx` 即可讀取)。
+*   **Token 管理**: 用於生成 API 寫入權限的 Token (讀取數據不需要 Token)。
+*   **複製連結**: 下拉選單可快速複製 `fast`, `browser`, `all` 的純淨訂閱連結。
 
-// 瀏覽器自動測速的樣本數量
-// 建議值：免費版 Worker 50，付費版 200-500
-const AUTO_TEST_MAX_IPS = 500; 
+### API 接口 (公開讀取)
+無需 Token 即可訪問以下地址獲取純文本數據（適合放入訂閱轉換器）：
 
-// IP 來源 (CIDR 列表)
-const CIDR_SOURCE_URLS = [
-    'https://raw.githubusercontent.com/cmliu/cmliu/refs/heads/main/CF-CIDR.txt'
-];
-```
+*   `https://fast.yourdomain.com` -> 後端自動優選 IP
+*   `https://browser.yourdomain.com` -> 瀏覽器實測優選 IP
+*   `https://all.yourdomain.com` -> 所有 IP 列表
+
+*支援參數*: `?format=ip` (僅輸出 IP，不帶端口與備註)
+
+---
+
+## 📸 支援端口
+系統主頁已內置 Cloudflare 支援的端口列表提示：
+*   **HTTP**: 80, 8080, 8880, 2052, 2082, 2086, 2095
+*   **HTTPS**: 443, 2053, 2083, 2087, 2096, 8443
 
 ---
 
 ## 🙏 致謝 (Credits)
-
 本專案基於開源社群的優秀專案進行二次開發與功能增強：
 
-*   **核心代碼基礎**：**[ethgan/CF-Worker-BestIP-collector](https://github.com/ethgan/CF-Worker-BestIP-collector)** - 感謝原作者提供的基礎 Worker 架構與思路。
-*   **IP 數據來源**：**[cmliu/cmliu](https://github.com/cmliu/cmliu)** - 感謝大佬整理與維護的 Cloudflare CIDR 列表。
-
----
+*   **核心代碼基礎**: [ethgan/CF-Worker-BestIP-collector](https://github.com/ethgan/CF-Worker-BestIP-collector) - 感謝原作者提供的基礎 Worker 架構與思路。
+*   **IP 數據來源**: [cmliu/cmliu](https://github.com/cmliu/cmliu) - 感謝大佬整理與維護的 Cloudflare CIDR 列表。
 
 ## ⚠️ 免責聲明
+本項目僅供學習與技術研究使用。請勿將其用於任何非法用途。IP 來源取自網絡公開資源，本項目不保證 IP 的可用性與速度。
 
-本專案僅供學習與技術研究使用。請勿用於任何非法用途。作者不對使用本腳本產生的任何後果負責。
-
-Cloudflare 是 Cloudflare, Inc. 的商標。本專案與 Cloudflare 無任何官方關聯。
+---
+*Based on CF-Worker-BestIP-collector V3.1.11*
+```
