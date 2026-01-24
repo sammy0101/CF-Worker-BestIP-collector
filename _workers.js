@@ -1,6 +1,7 @@
-// V3.1.11 端口資訊版：
-// 1. 新增「支援端口資訊」卡片 (HTTP/HTTPS)
-// 2. 保持所有功能：公開 API、無需 Token、子域名適配
+// V3.2.7 精簡儀表板版：
+// 1. 移除 IP 檢測卡片 (Google/Cloudflare IP 等)
+// 2. 僅保留 HTTP 連通性測試 (延遲檢測)
+// 3. 保持亮色主題與自動刷新
 
 // --- 設定區域 ---
 const FAST_IP_COUNT = 25; // 優質 IP 數量
@@ -26,48 +27,29 @@ export default {
       if (request.method === 'OPTIONS') return handleCORS();
 
       try {
-        // --- 1. 子域名路由邏輯 (公開訪問) ---
-        // 規則：fast.xxx 或 fast-xxx 開頭 -> 返回後端優選 IP
-        if (hostname.startsWith('fast.') || hostname.startsWith('fast-')) {
-            return await handleGetFastIPsText(env, request);
-        }
-        
-        // 規則：browser.xxx 或 web.xxx 開頭 -> 返回瀏覽器測速 IP
-        if (hostname.startsWith('browser.') || hostname.startsWith('web.')) {
-            return await handleGetBrowserIPsText(env, request);
-        }
+        // --- 1. 子域名路由 (公開) ---
+        if (hostname.startsWith('fast.') || hostname.startsWith('fast-')) return await handleGetFastIPsText(env, request);
+        if (hostname.startsWith('browser.') || hostname.startsWith('web.')) return await handleGetBrowserIPsText(env, request);
+        if (hostname.startsWith('all.') || hostname.startsWith('ips.') || hostname.startsWith('raw.')) return await handleGetIPs(env, request);
 
-        // 規則：all.xxx 或 ips.xxx 開頭 -> 返回所有 IP
-        if (hostname.startsWith('all.') || hostname.startsWith('ips.') || hostname.startsWith('raw.')) {
-            return await handleGetIPs(env, request);
-        }
-
-        // --- 2. 主域名常規路由 ---
+        // --- 2. 主路由 ---
         switch (path) {
           case '/': return await serveHTML(env, request);
           
-          // --- 核心接口 (需權限，涉及寫入操作) ---
-          case '/update':
-            if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
-            return await handleUpdate(env, request); 
-          case '/upload-results':
-            if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
-            return await handleUploadResults(env, request);
+          case '/update': if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405); return await handleUpdate(env, request); 
+          case '/upload-results': if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405); return await handleUploadResults(env, request);
           
-          // --- 數據讀取接口 (改為公開，無需權限) ---
           case '/ips': return await handleGetIPs(env, request);
           case '/ip.txt': return await handleGetIPs(env, request);
           case '/raw': return await handleRawIPs(env, request);
-          
           case '/fast-ips': return await handleGetFastIPs(env, request);
           case '/fast-ips.txt': return await handleGetFastIPsText(env, request);
-          
           case '/browser-ips.txt': return await handleGetBrowserIPsText(env, request);
-
           case '/speedtest': return await handleSpeedTest(request, env);
           case '/itdog-data': return await handleItdogData(env, request);
           
-          // --- 管理接口 (需權限) ---
+          case '/my-ip': return handleUserIP(request);
+
           case '/admin-login': return await handleAdminLogin(request, env);
           case '/admin-status': return await handleAdminStatus(env);
           case '/admin-logout': return await handleAdminLogout(env);
@@ -81,37 +63,28 @@ export default {
     }
   };
 
-  // 定時任務邏輯
   async function handleScheduled(env) {
       const { uniqueIPs, results } = await updateAllIPs(env);
-      await env.IP_STORAGE.put('cloudflare_ips', JSON.stringify({
-          ips: uniqueIPs, lastUpdated: new Date().toISOString(), count: uniqueIPs.length, sources: results
-      }));
+      await env.IP_STORAGE.put('cloudflare_ips', JSON.stringify({ ips: uniqueIPs, lastUpdated: new Date().toISOString(), count: uniqueIPs.length, sources: results }));
       await autoSpeedTestAndStore(env, uniqueIPs);
   }
 
   function addAuthToUrl(url, sessionId, tokenConfig) {
     if (!sessionId && !tokenConfig) return url;
     const separator = url.includes('?') ? '&' : '?';
-    if (tokenConfig && tokenConfig.token) {
-        return `${url}${separator}token=${encodeURIComponent(tokenConfig.token)}`;
-    }
-    if (sessionId) {
-        return `${url}${separator}session=${encodeURIComponent(sessionId)}`;
-    }
+    if (tokenConfig && tokenConfig.token) return `${url}${separator}token=${encodeURIComponent(tokenConfig.token)}`;
+    if (sessionId) return `${url}${separator}session=${encodeURIComponent(sessionId)}`;
     return url;
   }
 
-  // --- HTML 頁面 (保留權限驗證) ---
+  // --- HTML 生成 ---
   async function serveHTML(env, request) {
     const isLoggedIn = await verifyAdmin(request, env);
     const hasAdminPassword = !!env.ADMIN_PASSWORD;
     const tokenConfig = await getTokenConfig(env);
     
-    // 安全性：未登入不讀取 KV
     let data = { count: 0, lastUpdated: null };
     let fastIPs = [];
-    
     if (isLoggedIn) {
         data = await getStoredIPs(env);
         const speedData = await getStoredSpeedIPs(env);
@@ -129,302 +102,191 @@ export default {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloudflare 優選 IP 測速平台 (V3.1.11)</title>
+    <title>Cloudflare 優選 IP 測速平台 (V3.2.7)</title>
     <style>
+        :root { --primary: #3b82f6; --bg-card: #ffffff; --bg-inner: #f8fafc; --border: #e2e8f0; --text-main: #334155; --text-sub: #64748b; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; background: #f8fafc; color: #334155; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; }
-        .header h1 { font-size: 2.2rem; background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace; line-height: 1.6; background: #f1f5f9; color: var(--text-main); padding: 20px; }
+        .container { max-width: 1300px; margin: 0 auto; }
         
-        .social-link { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; border-radius: 10px; border: 1px solid #e2e8f0; background: white; margin-left: 8px; color: #475569; transition: all 0.3s; text-decoration: none; font-weight: 600; font-size: 0.9rem; }
-        .social-link:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); background: #f8fafc; color: #1e40af; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; }
+        .header h1 { font-size: 2rem; color: var(--primary); font-weight: 800; }
+        .social-link { padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: var(--text-sub); background: white; font-size: 0.9rem; transition: .2s; }
+        .social-link:hover { color: var(--primary); border-color: var(--primary); }
 
-        .card { background: white; border-radius: 16px; padding: 24px; margin-bottom: 24px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02); }
-        .card h2 { font-size: 1.4rem; color: #1e40af; margin-bottom: 16px; }
+        .card { background: var(--bg-card); border-radius: 16px; padding: 24px; margin-bottom: 24px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        .card h2 { font-size: 1.25rem; color: #1e293b; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; font-weight: 700; }
         
+        /* 延遲測試網格 */
+        .latency-section { margin-top: 5px; }
+        .latency-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
+        .latency-box { background: var(--bg-inner); border: 1px solid var(--border); border-radius: 8px; padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; transition: .2s; }
+        
+        .lat-label { font-size: 0.9rem; font-weight: 600; color: #475569; display: flex; align-items: center; gap: 8px; }
+        .lat-ms { font-family: monospace; font-weight: 700; font-size: 1.05rem; }
+        .ms-fast { color: #16a34a; } .ms-mid { color: #d97706; } .ms-slow { color: #dc2626; } .ms-err { color: #94a3b8; }
+
+        @media (max-width: 1024px) { .latency-row { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 600px) { .latency-row { grid-template-columns: 1fr; gap: 10px; } .header { flex-direction: column; text-align: center; gap: 10px; } }
+
+        /* 其他元件 */
         .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 24px; }
-        .stat { background: #f8fafc; padding: 16px; border-radius: 12px; text-align: center; border: 1px solid #e2e8f0; }
-        .stat-value { font-size: 1.8rem; font-weight: 700; color: #3b82f6; }
+        .stat { background: var(--bg-inner); padding: 16px; border-radius: 12px; text-align: center; border: 1px solid var(--border); }
+        .stat-value { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
         
-        .button-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; align-items: flex-start; }
-        .button { padding: 10px 18px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; background: #3b82f6; color: white; display: inline-flex; align-items: center; gap: 6px; font-size: 0.95rem; text-decoration: none; height: 42px; box-sizing: border-box; }
+        .button-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+        .button { padding: 10px 18px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; background: var(--primary); color: white; display: inline-flex; align-items: center; gap: 6px; font-size: 0.95rem; text-decoration: none; height: 42px; }
         .button:hover { background: #2563eb; transform: translateY(-1px); }
-        .button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-        .button-success { background: #10b981; }
-        .button-success:hover { background: #059669; }
-        .button-warning { background: #f59e0b; border: 1px solid #f59e0b; }
-        .button-warning:hover { background: #d97706; }
-        .button-secondary { background: white; color: #475569; border: 1px solid #cbd5e1; }
-        .button-secondary:hover { background: #f1f5f9; }
-        .button-purple { background: #8b5cf6; border: 1px solid #8b5cf6; }
-        .button-purple:hover { background: #7c3aed; }
-        
-        .dropdown { position: relative; display: inline-block; }
-        .dropdown-content { 
-            display: none; 
-            position: absolute; 
-            background-color: white; 
-            min-width: 220px; 
-            box-shadow: 0 8px 16px rgba(0,0,0,0.1); 
-            z-index: 10; 
-            border-radius: 8px; 
-            border: 1px solid #e2e8f0; 
-            top: 100%;
-            left: 0;
-            margin-top: 0; 
-        }
-        .dropdown:hover .dropdown-content { display: block; }
-        .dropdown-content a { color: #333; padding: 12px 16px; text-decoration: none; display: block; font-size: 0.9rem; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
-        .dropdown-content a:last-child { border-bottom: none; }
-        .dropdown-content a:hover { background-color: #f8fafc; color: #2563eb; }
+        .button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .button-success { background: #10b981; } .button-secondary { background: white; color: #475569; border: 1px solid #cbd5e1; } .button-purple { background: #8b5cf6; } .button-warning { background: #f59e0b; }
 
-        .ip-list { max-height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 12px; }
-        .ip-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #f1f5f9; background: white; }
-        .ip-item:hover { background: #f8fafc; }
-        
+        .ip-list { max-height: 500px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; }
+        .ip-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: white; }
         .ip-info { display: flex; align-items: center; gap: 12px; }
         .ip-address { font-family: monospace; font-weight: 600; font-size: 1.05rem; min-width: 140px; }
         .colo-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; background: #e0e7ff; color: #4338ca; font-weight: 600; min-width: 45px; text-align: center; }
-        .speed-result { font-size: 0.85rem; padding: 4px 10px; border-radius: 6px; background: #f1f5f9; min-width: 70px; text-align: center; font-weight: 600; }
-        .speed-fast { background: #d1fae5; color: #065f46; }
-        .speed-medium { background: #fef3c7; color: #92400e; }
-        .speed-slow { background: #fee2e2; color: #991b1b; }
-        .small-btn { padding: 4px 10px; font-size: 0.8rem; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer; }
+        .speed-result { font-size: 0.85rem; padding: 4px 10px; border-radius: 6px; background: var(--bg-inner); min-width: 70px; text-align: center; font-weight: 600; }
+        .speed-fast-bg { background: #dcfce7; color: #166534; } 
         
-        .log-box { background: #1e293b; color: #10b981; font-family: 'SF Mono', 'Courier New', monospace; font-size: 0.85rem; padding: 15px; border-radius: 12px; margin-top: 20px; height: 200px; overflow-y: auto; border: 1px solid #334155; display: none; line-height: 1.5; }
-        .log-line { margin-bottom: 4px; border-bottom: 1px solid #334155; padding-bottom: 2px; }
-        .log-error { color: #ef4444; }
-        .log-info { color: #3b82f6; }
-        .log-warn { color: #f59e0b; }
+        .dropdown { position: relative; display: inline-block; }
+        .dropdown-content { display: none; position: absolute; background-color: white; min-width: 230px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); z-index: 10; border-radius: 8px; border: 1px solid var(--border); top: 100%; left: 0; }
+        .dropdown:hover .dropdown-content { display: block; }
+        .dropdown-content a { color: #333; padding: 12px 16px; text-decoration: none; display: block; font-size: 0.9rem; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
+        .dropdown-content a:hover { background: var(--bg-inner); color: #2563eb; }
 
-        .lock-screen { text-align: center; padding: 50px 20px; }
-        .lock-icon { font-size: 60px; margin-bottom: 20px; }
-        .lock-input { padding: 12px 20px; font-size: 1rem; border: 2px solid #e2e8f0; border-radius: 8px; width: 100%; max-width: 300px; margin-bottom: 20px; transition: all 0.3s; }
-        .lock-input:focus { border-color: #3b82f6; outline: none; }
-
-        /* 端口資訊樣式 */
         .port-box { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
         .port-tag { padding: 4px 10px; border-radius: 6px; font-family: monospace; font-size: 0.95rem; border: 1px solid transparent; font-weight: 600; }
-        .tag-http { background: #fff1f2; color: #be123c; border-color: #fda4af; }
-        .tag-https { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+        .tag-http { background: #fff1f2; color: #be123c; border-color: #fda4af; } .tag-https { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
 
+        .log-box { background: #1e293b; color: #10b981; font-family: monospace; font-size: 0.85rem; padding: 15px; border-radius: 12px; margin-top: 20px; height: 200px; overflow-y: auto; border: 1px solid #334155; display: none; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); z-index: 1000; justify-content: center; align-items: center; }
-        .modal-content { background: white; padding: 24px; border-radius: 16px; width: 90%; max-width: 450px; box-shadow: 0 20px 25px rgba(0,0,0,0.1); }
+        .modal-content { background: white; padding: 24px; border-radius: 16px; width: 90%; max-width: 450px; }
         .admin-indicator { position: fixed; top: 20px; right: 20px; z-index: 900; }
         .admin-badge { background: #10b981; color: white; padding: 8px 16px; border-radius: 20px; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .admin-badge.logged-out { background: #ef4444; }
-        
         .progress-bar { height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; margin: 10px 0; display: none; }
         .progress-fill { height: 100%; background: #3b82f6; width: 0%; transition: width 0.3s; }
-
-        @media (max-width: 768px) {
-            .header { flex-direction: column; text-align: center; gap: 15px; }
-            .button { width: 100%; justify-content: center; }
-            .ip-item { flex-direction: column; align-items: flex-start; gap: 8px; }
-            .ip-info { width: 100%; justify-content: space-between; }
-            .action-buttons { width: 100%; justify-content: flex-end; }
-        }
     </style>
 </head>
 <body>
     <div class="admin-indicator">
-        <div class="admin-badge ${isLoggedIn ? '' : 'logged-out'}" onclick="${isLoggedIn ? 'logout()' : ''}" id="admin-badge">
-            ${isLoggedIn ? '🔐 管理員' : '🔒 未登入'}
-        </div>
+        <div class="admin-badge ${isLoggedIn ? '' : 'logged-out'}" onclick="${isLoggedIn ? 'logout()' : ''}" id="admin-badge">${isLoggedIn ? '🔐 管理員' : '🔒 未登入'}</div>
         ${isLoggedIn ? `<div class="dropdown-content" id="admin-dropdown" style="display:none; position:absolute; right:0;"><a onclick="logout()">退出登入</a></div>` : ''}
     </div>
 
     <div class="container">
         <div class="header">
-            <div class="header-content">
-                <h1>Cloudflare 優選 IP 測速平台</h1>
-                <p>V3.1.11</p>
-            </div>
-            <div>
-                <a href="https://github.com/sammy0101/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a>
+            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.2.7</p></div>
+            <div><a href="https://github.com/sammy0101/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a></div>
+        </div>
+
+        <!-- 儀表板區域 (精簡版：僅保留連通性測試) -->
+        <div class="card">
+            <h2>🌍 當前網絡信息 <span style="font-size:0.8rem; color:#94a3b8; font-weight:400; margin-left:10px;">(每5秒自動刷新)</span></h2>
+            
+            <div class="latency-section">
+                <div style="font-size:0.85rem; font-weight:700; color:#64748b; margin-bottom:8px;">HTTP 連通性測試 - 國外</div>
+                <div class="latency-row">
+                    <div class="latency-box"><div class="lat-label">🐙 GitHub</div><div class="lat-ms ms-err" id="lat-github">---</div></div>
+                    <div class="latency-box"><div class="lat-label">🤖 OpenAI</div><div class="lat-ms ms-err" id="lat-openai">---</div></div>
+                    <div class="latency-box"><div class="lat-label">☁️ Cloudflare</div><div class="lat-ms ms-err" id="lat-cf">---</div></div>
+                    <div class="latency-box"><div class="lat-label">▶️ YouTube</div><div class="lat-ms ms-err" id="lat-youtube">---</div></div>
+                </div>
+
+                <div style="font-size:0.85rem; font-weight:700; color:#64748b; margin-bottom:8px;">HTTP 連通性測試 - 國內</div>
+                <div class="latency-row">
+                    <div class="latency-box"><div class="lat-label">🐼 百度</div><div class="lat-ms ms-err" id="lat-baidu">---</div></div>
+                    <div class="latency-box"><div class="lat-label">📺 Bilibili</div><div class="lat-ms ms-err" id="lat-bilibili">---</div></div>
+                    <div class="latency-box"><div class="lat-label">💬 微信</div><div class="lat-ms ms-err" id="lat-wechat">---</div></div>
+                    <div class="latency-box"><div class="lat-label">🛒 淘寶</div><div class="lat-ms ms-err" id="lat-taobao">---</div></div>
+                </div>
             </div>
         </div>
 
         ${!isLoggedIn ? `
-        <!-- 未登入：鎖定畫面 -->
+        <!-- 鎖定畫面 -->
         <div class="card lock-screen">
             <div class="lock-icon">🔒</div>
             <h2>系統已鎖定</h2>
             <p style="color:#64748b; margin-bottom:30px;">請輸入管理員密碼以查看與下載數據。</p>
-            <div>
-                <input type="password" id="main-pass" class="lock-input" placeholder="輸入管理員密碼">
-                <br>
-                <div style="margin-bottom: 20px;">
-                    <label style="cursor:pointer; color:#64748b; font-size:0.95rem;">
-                        <input type="checkbox" id="remember-pass-main" style="margin-right:6px;">記住密碼
-                    </label>
-                </div>
-                <button class="button" onclick="loginMain()" id="main-login-btn">登入系統</button>
-            </div>
+            <input type="password" id="main-pass" class="lock-input" placeholder="輸入管理員密碼"><br>
+            <div style="margin-bottom: 20px;"><label style="cursor:pointer; color:#64748b; font-size:0.95rem;"><input type="checkbox" id="remember-pass-main" style="margin-right:6px;">記住密碼</label></div>
+            <button class="button" onclick="loginMain()">登入系統</button>
         </div>
         ` : `
-        <!-- 已登入：主控台 -->
+        <!-- 主控台 -->
         <div class="card">
             <h2>📊 系統狀態</h2>
             <div class="stats">
-                <div class="stat"><div class="stat-value" id="ip-count">${data.count || 0}</div><div>IP 總數</div></div>
-                <div class="stat"><div class="stat-value" id="last-time">${data.lastUpdated ? new Date(data.lastUpdated).toLocaleTimeString() : '從未'}</div><div>更新時間</div></div>
-                <div class="stat"><div class="stat-value" id="fast-ip-count">${fastIPs.length}</div><div>優質 IP</div></div>
+                <div class="stat"><div class="stat-value">${data.count || 0}</div><div>IP 總數</div></div>
+                <div class="stat"><div class="stat-value">${data.lastUpdated ? new Date(data.lastUpdated).toLocaleTimeString() : '從未'}</div><div>更新時間</div></div>
+                <div class="stat"><div class="stat-value">${fastIPs.length}</div><div>優質 IP</div></div>
             </div>
-            
             <div class="button-group">
                 <button class="button" onclick="updateIPs()" id="update-btn">🔄 立即更新庫</button>
                 <button class="button button-warning" onclick="startSpeedTest()" id="speedtest-btn">⚡ 瀏覽器測速</button>
                 
-                <!-- 下載中心 -->
-                <div class="dropdown">
-                    <button class="button button-success">🚀 下載中心 ▼</button>
+                <div class="dropdown"><button class="button button-success">🚀 下載中心 ▼</button>
                     <div class="dropdown-content">
                         <a href="${addAuthToUrl('/fast-ips.txt', sessionId, tokenConfig)}" download="cloudflare_fast_ips.txt">🚀 下載後端優選 IP</a>
                         <a onclick="downloadBrowserResults()">⚡ 下載本機測速結果</a>
                         <a href="${addAuthToUrl('/ips', sessionId, tokenConfig)}" download="all_ips.txt">📦 下載完整 IP 庫</a>
                     </div>
                 </div>
-
-                <!-- 線上查看 -->
-                <div class="dropdown">
-                    <button class="button button-secondary">📄 線上查看 ▼</button>
+                <div class="dropdown"><button class="button button-secondary">📄 線上查看 ▼</button>
                     <div class="dropdown-content">
                         <a href="${addAuthToUrl('/fast-ips.txt', sessionId, tokenConfig)}" target="_blank">🚀 查看後端優選 IP</a>
                         <a href="${addAuthToUrl('/browser-ips.txt', sessionId, tokenConfig)}" target="_blank">⚡ 查看本機測速結果</a>
                         <a href="${addAuthToUrl('/ip.txt', sessionId, tokenConfig)}" target="_blank">📦 查看完整 IP 庫</a>
                     </div>
                 </div>
-
-                <!-- API 連結 -->
-                <div class="dropdown">
-                    <button class="button button-purple">🔌 複製 API 連結 ▼</button>
+                <div class="dropdown"><button class="button button-purple">🔌 複製 API 連結 ▼</button>
                     <div class="dropdown-content">
                         <a onclick="copyApiUrl('fast')">🚀 複製後端優選 IP API</a>
                         <a onclick="copyApiUrl('browser')">⚡ 複製本機測速結果 API</a>
                         <a onclick="copyApiUrl('all')">📦 複製完整 IP 庫 API</a>
                     </div>
                 </div>
-
                 <button class="button" onclick="openItdogModal()" style="background: #8b5cf6;">🌐 ITDog 測速</button>
-                <button class="button button-secondary" onclick="openTokenModal()" id="token-btn">🔑 Token 管理</button>
+                <button class="button button-secondary" onclick="openTokenModal()">🔑 Token 管理</button>
             </div>
-            
             <div id="log-box" class="log-box"></div>
-            
-             ${tokenConfig ? `
-            <div style="margin-top: 15px; padding: 10px; background: #f1f5f9; border-radius: 8px; font-size: 0.85rem;">
-                <strong>當前 Token:</strong> <span style="font-family:monospace; background:white; padding:2px 6px; border-radius:4px;">${tokenConfig.token}</span>
-                <span style="color:#64748b; margin-left:10px;">(過期: ${tokenConfig.neverExpire ? '永不' : new Date(tokenConfig.expires).toLocaleDateString()})</span>
-            </div>` : ''}
+            ${tokenConfig ? `<div style="margin-top: 15px; padding: 10px; background: #f1f5f9; border-radius: 8px; font-size: 0.85rem;"><strong>當前 Token:</strong> <span style="font-family:monospace; background:white; padding:2px 6px; border-radius:4px;">${tokenConfig.token}</span></div>` : ''}
         </div>
 
-        <!-- 端口資訊卡片 -->
+        <!-- 端口資訊 -->
         <div class="card">
             <h2>📡 支援端口資訊</h2>
             <div style="margin-bottom: 20px;">
                 <div style="color:#be123c; font-weight:600; margin-bottom:5px;">HTTP 支援端口：</div>
-                <div class="port-box">
-                    <span class="port-tag tag-http">80</span>
-                    <span class="port-tag tag-http">8080</span>
-                    <span class="port-tag tag-http">8880</span>
-                    <span class="port-tag tag-http">2052</span>
-                    <span class="port-tag tag-http">2082</span>
-                    <span class="port-tag tag-http">2086</span>
-                    <span class="port-tag tag-http">2095</span>
-                </div>
+                <div class="port-box"><span class="port-tag tag-http">80</span><span class="port-tag tag-http">8080</span><span class="port-tag tag-http">8880</span><span class="port-tag tag-http">2052</span><span class="port-tag tag-http">2082</span><span class="port-tag tag-http">2086</span><span class="port-tag tag-http">2095</span></div>
             </div>
             <div>
                 <div style="color:#1d4ed8; font-weight:600; margin-bottom:5px;">HTTPS 支援端口：</div>
-                <div class="port-box">
-                    <span class="port-tag tag-https">443</span>
-                    <span class="port-tag tag-https">2053</span>
-                    <span class="port-tag tag-https">2083</span>
-                    <span class="port-tag tag-https">2087</span>
-                    <span class="port-tag tag-https">2096</span>
-                    <span class="port-tag tag-https">8443</span>
-                </div>
+                <div class="port-box"><span class="port-tag tag-https">443</span><span class="port-tag tag-https">2053</span><span class="port-tag tag-https">2083</span><span class="port-tag tag-https">2087</span><span class="port-tag tag-https">2096</span><span class="port-tag tag-https">8443</span></div>
             </div>
         </div>
 
         <div class="card">
-            <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
-                <h2 id="list-title">🏆 優選 IP 列表</h2>
-                <button class="small-btn" onclick="copyAllFastIPs()">📋 複製所有 IP</button>
-            </div>
-            
+            <div style="display:flex; justify-content:space-between; margin-bottom:15px;"><h2>🏆 優選 IP 列表</h2><button class="small-btn" onclick="copyAllFastIPs()">📋 複製所有 IP</button></div>
             <div class="progress-bar" id="progress"><div class="progress-fill" id="progress-fill"></div></div>
             <div id="status-text" style="text-align:center; font-size:0.85rem; color:#64748b; margin-bottom:10px;"></div>
-
             <div class="ip-list" id="ip-list">
                 ${fastIPs.length > 0 ? fastIPs.map(item => {
-                    const speedClass = item.latency < 200 ? 'speed-fast' : item.latency < 500 ? 'speed-medium' : 'speed-slow';
-                    const colo = item.colo || '---';
-                    const isGoodForGD = ['HKG', 'SJC', 'LAX', 'TPE'].includes(colo);
-                    const coloStyle = isGoodForGD ? 'background:#dcfce7; color:#166534;' : '';
-                    
-                    return `<div class="ip-item" data-ip="${item.ip}">
-                        <div class="ip-info">
-                            <span class="colo-badge" style="${coloStyle}">${colo}</span>
-                            <span class="ip-address">${item.ip}</span>
-                            <span class="speed-result ${speedClass}" id="speed-${item.ip.replace(/\./g, '-')}">${item.latency}ms</span>
-                        </div>
-                        <div class="action-buttons">
-                            <button class="small-btn" onclick="copyIP('${item.ip}')">複製</button>
-                        </div>
-                    </div>`;
+                    const speedClass = item.latency < 200 ? 'speed-fast-bg' : '';
+                    const colo = item.colo || 'UNK';
+                    const coloStyle = ['HKG', 'SJC', 'LAX', 'TPE'].includes(colo) ? 'background:#dcfce7; color:#166534;' : '';
+                    return `<div class="ip-item" data-ip="${item.ip}"><div class="ip-info"><span class="colo-badge" style="${coloStyle}">${colo}</span><span class="ip-address">${item.ip}</span><span class="speed-result ${speedClass}">${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('${item.ip}')">複製</button></div>`;
                 }).join('') : '<p style="text-align:center; padding:30px; color:#94a3b8;">暫無數據，請點擊更新</p>'}
             </div>
         </div>
         `}
     </div>
 
-    <!-- 模態框組件 -->
-    <div class="modal" id="itdog-modal">
-        <div class="modal-content">
-            <h3>🌐 ITDog 測速</h3>
-            <p style="margin-bottom:15px; color:#475569; font-size:0.95rem;">此功能將複製「優選 IP 列表」中的 IP 地址 (約 ${FAST_IP_COUNT} 個)。請前往 ITDog 的批量 Ping/TCPing 頁面進行測試，以獲得最準確的連線速度。</p>
-            <div style="text-align:right;">
-                <button class="button button-secondary" onclick="document.getElementById('itdog-modal').style.display='none'">關閉</button>
-                <button class="button" onclick="copyIPsForItdog()">📋 複製優選 IP 並前往</button>
-            </div>
-        </div>
-    </div>
-    
-    <div class="modal" id="login-modal">
-        <div class="modal-content">
-            <h3>🔐 管理員登入</h3>
-            <div class="admin-hint ${hasAdminPassword ? '' : 'warning'}" style="margin-bottom:10px; font-size:0.9rem; color:${hasAdminPassword?'#64748b':'#ef4444'};">
-                ${hasAdminPassword ? '請輸入密碼' : '⚠️ 未設置 ADMIN_PASSWORD 環境變數'}
-            </div>
-            <input type="password" id="admin-pass" placeholder="輸入密碼" style="width:100%; padding:10px; margin:15px 0; border:1px solid #cbd5e1; border-radius:8px;" ${!hasAdminPassword?'disabled':''}>
-            <div style="margin-bottom: 20px; text-align: left;">
-                <label style="cursor:pointer; color:#64748b; font-size:0.95rem;">
-                    <input type="checkbox" id="remember-pass-modal" style="margin-right:6px;">記住密碼
-                </label>
-            </div>
-            <div style="text-align:right;">
-                <button class="button button-secondary" onclick="document.getElementById('login-modal').style.display='none'">取消</button>
-                <button class="button" onclick="loginModal()" ${!hasAdminPassword?'disabled':''} id="login-confirm-btn">登入</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal" id="token-modal">
-        <div class="modal-content">
-            <h3>⚙️ Token 設定</h3>
-            <input type="text" id="token-in" placeholder="Token" style="width:100%; padding:10px; margin:10px 0; border:1px solid #cbd5e1; border-radius:8px;">
-            <div style="margin-bottom:15px;">
-                <label><input type="checkbox" id="never-expire"> 永不過期</label>
-                <input type="number" id="expire-days" placeholder="過期天數 (30)" style="width:80px; margin-left:10px; padding:5px;">
-            </div>
-            <div style="text-align:right;">
-                <button class="button button-secondary" onclick="document.getElementById('token-modal').style.display='none'">取消</button>
-                <button class="button" onclick="saveToken()">儲存</button>
-            </div>
-        </div>
-    </div>
+    <!-- Modals -->
+    <div class="modal" id="itdog-modal"><div class="modal-content"><h3>🌐 ITDog 測速</h3><p style="margin-bottom:15px;">複製 IP 至 ITDog 測試。</p><div style="text-align:right;"><button class="button button-secondary" onclick="document.getElementById('itdog-modal').style.display='none'">關閉</button><button class="button" onclick="copyIPsForItdog()">📋 複製前往</button></div></div></div>
+    <div class="modal" id="login-modal"><div class="modal-content"><h3>🔐 管理員登入</h3><input type="password" id="admin-pass" placeholder="密碼" style="width:100%; padding:10px; margin:15px 0;"><button class="button" onclick="loginModal()">登入</button></div></div>
+    <div class="modal" id="token-modal"><div class="modal-content"><h3>⚙️ Token 設定</h3><input type="text" id="token-in" placeholder="Token" style="width:100%; padding:10px; margin:10px 0;"><div style="text-align:right;"><button class="button button-secondary" onclick="document.getElementById('token-modal').style.display='none'">取消</button><button class="button" onclick="saveToken()">儲存</button></div></div></div>
 
     <script>
         let sessionId = '${sessionId || ''}';
@@ -434,292 +296,153 @@ export default {
         const DISPLAY_COUNT = ${FAST_IP_COUNT};
 
         document.addEventListener('DOMContentLoaded', function() {
+            initDashboard();
+            setInterval(initDashboard, 5000); 
+            
             if (!isLoggedIn) {
                 const savedPass = localStorage.getItem('cf_admin_pass');
-                if (savedPass) {
-                    document.getElementById('main-pass').value = savedPass;
-                    document.getElementById('remember-pass-main').checked = true;
-                }
+                if (savedPass) { document.getElementById('main-pass').value = savedPass; document.getElementById('remember-pass-main').checked = true; }
             }
-
-            const passInputs = ['main-pass', 'admin-pass'];
-            passInputs.forEach(id => {
-                const el = document.getElementById(id);
-                if(el) {
-                    el.addEventListener('keypress', function(e) {
-                        if (e.key === 'Enter') {
-                            e.preventDefault(); 
-                            if(id === 'main-pass') loginMain(); else loginModal();
-                        }
-                    });
-                }
-            });
+            document.querySelectorAll('input[type=password]').forEach(el => el.addEventListener('keypress', e => { if(e.key==='Enter') isLoggedIn ? loginModal() : loginMain(); }));
         });
 
+        // === 儀表板邏輯 ===
+        function initDashboard() {
+            // 延遲測試
+            checkLatency('https://github.githubassets.com/favicons/favicon.svg', 'lat-github');
+            checkLatency('https://openai.com/favicon.ico', 'lat-openai');
+            checkLatency('https://www.cloudflare.com/favicon.ico', 'lat-cf');
+            checkLatency('https://www.youtube.com/favicon.ico', 'lat-youtube');
+            checkLatency('https://www.baidu.com/favicon.ico', 'lat-baidu');
+            checkLatency('https://www.bilibili.com/favicon.ico', 'lat-bilibili');
+            checkLatency('https://res.wx.qq.com/a/wx_fed/assets/res/NTI4MWU5.ico', 'lat-wechat');
+            checkLatency('https://www.taobao.com/favicon.ico', 'lat-taobao');
+        }
+
+        async function checkLatency(url, elId) {
+            const el = document.getElementById(elId);
+            const start = Date.now();
+            const img = new Image();
+            const timeout = setTimeout(() => { el.innerText = '超時'; el.className = 'lat-ms ms-slow'; }, 5000);
+            img.onload = img.onerror = function() {
+                clearTimeout(timeout);
+                const ping = Date.now() - start;
+                el.innerText = ping + 'ms';
+                el.className = 'lat-ms ' + (ping < 100 ? 'ms-fast' : ping < 300 ? 'ms-mid' : 'ms-slow');
+            };
+            img.src = url + '?' + Math.random();
+        }
+
+        // === 既有邏輯 (保持不變) ===
         function addLog(msg, type='normal') {
-            const box = document.getElementById('log-box');
-            if(!box) return;
-            box.style.display = 'block';
-            const time = new Date().toLocaleTimeString();
-            let className = 'log-line';
-            if(type==='error') className += ' log-error';
-            if(type==='info') className += ' log-info';
-            if(type==='warn') className += ' log-warn';
-            
-            box.innerHTML += \`<div class="\${className}">[\${time}] \${msg}</div>\`;
+            const box = document.getElementById('log-box'); if(!box) return; box.style.display='block';
+            box.innerHTML += \`<div class="log-line \${type==='error'?'log-error':type==='info'?'log-info':''}">[\${new Date().toLocaleTimeString()}] \${msg}</div>\`;
             box.scrollTop = box.scrollHeight;
         }
-        function clearLog() {
-            const box = document.getElementById('log-box');
-            if(box) box.innerHTML = '';
-        }
+        function clearLog() { const box = document.getElementById('log-box'); if(box) box.innerHTML = ''; }
 
         async function api(path, method='GET', body=null) {
             const headers = { 'Content-Type': 'application/json' };
             if (sessionId) headers['Authorization'] = 'Bearer ' + sessionId;
             else if (tokenConfig) headers['Authorization'] = 'Token ' + tokenConfig.token;
-            
             const opts = { method, headers };
             if (body) opts.body = JSON.stringify(body);
-            
-            let url = path;
-            if (method === 'GET' && (sessionId || tokenConfig)) {
-                const char = url.includes('?') ? '&' : '?';
-                if(tokenConfig) url += char + 'token=' + encodeURIComponent(tokenConfig.token);
-                else if(sessionId) url += char + 'session=' + encodeURIComponent(sessionId);
-            }
-
-            const res = await fetch(url, opts);
-            return res.json();
+            let url = path + (method==='GET' && (sessionId||tokenConfig) ? (path.includes('?')?'&':'?') + (tokenConfig ? 'token='+tokenConfig.token : 'session='+sessionId) : '');
+            return (await fetch(url, opts)).json();
         }
 
-        async function loginMain() {
-            const pwd = document.getElementById('main-pass').value;
-            const remember = document.getElementById('remember-pass-main').checked;
-            performLogin(pwd, remember);
-        }
-
-        async function loginModal() {
-            const pwd = document.getElementById('admin-pass').value;
-            const remember = document.getElementById('remember-pass-modal').checked;
-            performLogin(pwd, remember);
-        }
-
+        async function loginMain() { performLogin(document.getElementById('main-pass').value, document.getElementById('remember-pass-main').checked); }
+        async function loginModal() { performLogin(document.getElementById('admin-pass').value, true); }
         async function performLogin(password, remember) {
             if(!password) return alert('請輸入密碼');
-            
-            const res = await api('/admin-login', 'POST', {password: password});
+            const res = await api('/admin-login', 'POST', {password});
             if(res.success) {
-                if(remember) localStorage.setItem('cf_admin_pass', password);
-                else localStorage.removeItem('cf_admin_pass');
-                
-                const url = new URL(window.location.href);
-                url.searchParams.set('session', res.sessionId);
-                window.location.href = url.toString();
-            } else {
-                alert(res.error);
-            }
+                if(remember) localStorage.setItem('cf_admin_pass', password); else localStorage.removeItem('cf_admin_pass');
+                const url = new URL(window.location.href); url.searchParams.set('session', res.sessionId); window.location.href = url.toString();
+            } else alert(res.error);
         }
-        
-        async function logout() {
-            await api('/admin-logout', 'POST');
-            const url = new URL(window.location.href);
-            url.searchParams.delete('session');
-            window.location.href = url.toString();
-        }
+        async function logout() { await api('/admin-logout', 'POST'); const url = new URL(window.location.href); url.searchParams.delete('session'); window.location.href = url.toString(); }
 
         async function updateIPs() {
-            const btn = document.getElementById('update-btn');
-            btn.disabled = true;
-            btn.innerText = '更新中...';
-            clearLog();
-            addLog('🚀 開始執行後端更新...', 'info');
-            addLog('⏳ 等待 Cloudflare Worker 回應...');
-            
-            try {
-                const res = await api('/update', 'POST');
-                if(res.success) { 
-                    addLog(\`✅ 更新成功！\`, 'info');
-                    addLog(\`📊 收集 IP 總數: \${res.totalIPs}\`);
-                    setTimeout(() => location.reload(), 2000); 
-                }
-                else addLog('❌ 失敗: ' + res.error, 'error');
-            } catch(e) { 
-                addLog('❌ 請求發生錯誤: ' + e.message, 'error'); 
-            }
-            btn.disabled = false;
-            btn.innerText = '🔄 立即更新庫';
+            const btn = document.getElementById('update-btn'); btn.disabled = true; btn.innerText = '更新中...';
+            clearLog(); addLog('🚀 後端更新中...', 'info');
+            try { const res = await api('/update', 'POST'); if(res.success) { addLog('✅ 成功'); setTimeout(()=>location.reload(), 2000); } else addLog('❌ '+res.error, 'error'); } catch(e) { addLog('❌ '+e.message, 'error'); }
+            btn.disabled = false; btn.innerText = '🔄 立即更新庫';
         }
 
         async function startSpeedTest() {
             const allIpElements = document.querySelectorAll('.ip-item');
             let allIps = [];
-            try {
-                const res = await api('/raw');
-                if(res.ips && res.ips.length > 0) allIps = res.ips;
-                else throw new Error('No IPs');
-            } catch(e) {
-                allIps = Array.from(allIpElements).map(el => el.dataset.ip);
-            }
+            try { const res = await api('/raw'); allIps = res.ips && res.ips.length ? res.ips : []; } catch(e) {}
+            if(!allIps.length) allIps = Array.from(allIpElements).map(el => el.dataset.ip);
+            if(!allIps.length) return addLog('❌ 無 IP', 'error');
 
-            if(allIps.length === 0) return addLog('❌ 無 IP 可測', 'error');
-            
-            clearLog();
-            addLog(\`🚀 開始瀏覽器測速\`, 'info');
-            addLog(\`📄 IP 庫總數: \${allIps.length}\`);
-            
-            addLog('🎲 正在隨機打亂 IP 列表...');
-            for (let i = allIps.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [allIps[i], allIps[j]] = [allIps[j], allIps[i]];
-            }
-            
+            clearLog(); addLog(\`🚀 測速開始 (\${allIps.length} IPs)\`, 'info');
+            for (let i = allIps.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [allIps[i], allIps[j]] = [allIps[j], allIps[i]]; }
             const targets = allIps.slice(0, MAX_TEST);
-            addLog(\`🎯 隨機抽取 \${targets.length} 個 IP 進行測試...\`, 'info');
-
+            
             document.getElementById('progress').style.display = 'block';
-            document.getElementById('speedtest-btn').disabled = true;
-            
-            let count = 0;
-            let successCount = 0;
-            let results = [];
-            
+            let count = 0, results = [];
             for(const ip of targets) {
-                document.getElementById('status-text').innerText = \`正在測試 \${ip} (\${count+1}/\${targets.length})...\`;
-                
+                document.getElementById('status-text').innerText = \`測試 \${ip} (\${count+1}/\${targets.length})\`;
                 try {
                     const start = performance.now();
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 3000);
-                    
+                    setTimeout(() => controller.abort(), 2000);
                     const res = await fetch(\`/speedtest?ip=\${ip}\`, { signal: controller.signal });
-                    clearTimeout(timeoutId);
-                    
                     const data = await res.json();
-                    const latency = Math.round(performance.now() - start);
-                    
+                    const lat = Math.round(performance.now() - start);
                     if(data.success) {
-                        const colo = data.colo || 'UNK';
-                        const speedType = latency < 200 ? '極快' : latency < 500 ? '普通' : '慢速';
-                        let logType = 'normal';
-                        if(latency < 200) logType = 'info';
-                        
-                        addLog(\`✅ [\${colo}] \${ip} - \${latency}ms (\${speedType})\`, logType);
-                        results.push({ip, latency, colo});
-                        successCount++;
-                    } else {
-                        addLog(\`❌ \${ip} - 連接失敗\`, 'warn');
+                        addLog(\`✅ [\${data.colo}] \${ip} - \${lat}ms\`, lat<200?'info':'normal');
+                        results.push({ip, latency: lat, colo: data.colo || 'UNK'});
                     }
-                } catch(e) { 
-                    addLog(\`❌ \${ip} - 超時\`, 'warn');
-                }
-                
+                } catch(e) {}
                 count++;
                 document.getElementById('progress-fill').style.width = (count/targets.length*100) + '%';
-                await new Promise(r => setTimeout(r, 100));
+                await new Promise(r => setTimeout(r, 50));
             }
-            
-            addLog('🏁 測速完成！', 'info');
-            addLog(\`📊 有效 IP: \${successCount} / \${targets.length}\`);
-            
-            if(results.length > 0) {
-                addLog('🏆 正在更新列表為本地實測最快 IP...', 'info');
+            if(results.length) {
                 results.sort((a,b) => a.latency - b.latency);
                 const topResults = results.slice(0, DISPLAY_COUNT);
-                
-                const listEl = document.getElementById('ip-list');
                 let newHtml = '';
                 topResults.forEach(item => {
-                    const speedClass = item.latency < 200 ? 'speed-fast' : item.latency < 500 ? 'speed-medium' : 'speed-slow';
-                    const isGoodForGD = ['HKG', 'SJC', 'LAX', 'TPE'].includes(item.colo);
-                    const coloStyle = isGoodForGD ? 'background:#dcfce7; color:#166534;' : '';
-                    newHtml += \`<div class="ip-item" data-ip="\${item.ip}"><div class="ip-info"><span class="colo-badge" style="\${coloStyle}">\${item.colo}</span><span class="ip-address">\${item.ip}</span><span class="speed-result \${speedClass}">\${item.latency}ms</span></div><div class="action-buttons"><button class="small-btn" onclick="copyIP('\${item.ip}')">複製</button></div></div>\`;
+                    const coloStyle = ['HKG','SJC','LAX','TPE'].includes(item.colo) ? 'background:#dcfce7;color:#166534;' : '';
+                    newHtml += \`<div class="ip-item" data-ip="\${item.ip}"><div class="ip-info"><span class="colo-badge" style="\${coloStyle}">\${item.colo}</span><span class="ip-address">\${item.ip}</span><span class="speed-result">\${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('\${item.ip}')">複製</button></div>\`;
                 });
-                listEl.innerHTML = newHtml;
-                document.getElementById('list-title').innerHTML = '🏆 優選 IP 列表 (本地實測)';
-                
-                addLog('☁️ 正在上傳測速結果到伺服器...', 'info');
-                try {
-                    await api('/upload-results', 'POST', { fastIPs: topResults });
-                    addLog('✅ 結果已同步至雲端，下次訪問將顯示此結果。', 'info');
-                } catch(e) {
-                    addLog('❌ 上傳失敗: ' + e.message, 'error');
-                }
-            } else {
-                addLog('⚠️ 沒有測到有效的 IP。', 'warn');
+                document.getElementById('ip-list').innerHTML = newHtml;
+                try { await api('/upload-results', 'POST', { fastIPs: topResults }); addLog('✅ 結果已上傳'); } catch(e){}
             }
-
-            document.getElementById('status-text').innerText = '測速完成';
-            document.getElementById('speedtest-btn').disabled = false;
-            setTimeout(() => document.getElementById('progress').style.display = 'none', 3000);
+            document.getElementById('progress').style.display = 'none';
         }
 
         function downloadBrowserResults() {
             const items = document.querySelectorAll('.ip-item');
-            if(items.length === 0) return alert('列表為空，請先進行瀏覽器測速！');
-
-            let content = '';
-            items.forEach(item => {
-                const ip = item.dataset.ip;
-                const speed = item.querySelector('.speed-result').innerText;
-                const colo = item.querySelector('.colo-badge').innerText;
-                content += \`\${ip}#\${colo}:\${speed}\\n\`;
-            });
-
-            const blob = new Blob([content], { type: 'text/plain' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = \`my_speedtest_\${new Date().toISOString().slice(0,10)}.txt\`;
-            a.click();
-            window.URL.revokeObjectURL(url);
+            if(!items.length) return alert('無數據');
+            let txt = ''; items.forEach(i => txt += \`\${i.dataset.ip}#\${i.querySelector('.colo-badge').innerText}:\${i.querySelector('.speed-result').innerText}\\n\`);
+            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], {type:'text/plain'})); a.download = 'speedtest.txt'; a.click();
         }
 
         function copyApiUrl(type) {
-            const currentHost = window.location.host; 
-            const parts = currentHost.split('.');
-            let newHost = '';
-
-            // 支援子域名邏輯
-            if (parts.length >= 3) {
-                parts[0] = type;
-                newHost = parts.join('.');
-            } else {
-                newHost = type + '.' + currentHost;
-            }
-            
-            // 僅複製域名 (不含 Token，不含 http)
-            const fullUrl = newHost;
-            
-            navigator.clipboard.writeText(fullUrl).then(() => {
-                alert('已複製 API 域名 (不含 Token)：\\n' + fullUrl);
-            }).catch(err => {
-                alert('複製失敗，請手動複製');
-            });
+            const host = window.location.host; const parts = host.split('.');
+            let url = parts.length >= 3 ? (parts[0]=type, parts.join('.')) : type+'.'+host;
+            navigator.clipboard.writeText(url).then(()=>alert('已複製: '+url));
         }
 
         function openTokenModal() { document.getElementById('token-modal').style.display='flex'; }
         async function saveToken() {
             const token = document.getElementById('token-in').value;
-            const never = document.getElementById('never-expire').checked;
-            const days = document.getElementById('expire-days').value;
-            const res = await api('/admin-token', 'POST', {token, neverExpire: never, expiresDays: parseInt(days)});
-            if(res.success) location.reload(); else alert(res.error);
+            const res = await api('/admin-token', 'POST', {token, neverExpire: document.getElementById('never-expire').checked, expiresDays: 30});
+            if(res.success) location.reload();
         }
-
-        function copyIP(ip) { navigator.clipboard.writeText(ip); alert('已複製 ' + ip); }
-        function copyAllFastIPs() {
+        function copyIP(ip) { navigator.clipboard.writeText(ip); alert('已複製'); }
+        function copyAllFastIPs() { 
             const ips = Array.from(document.querySelectorAll('.ip-address')).map(el => el.innerText).join('\\n');
-            navigator.clipboard.writeText(ips); alert('已複製所有 IP');
+            navigator.clipboard.writeText(ips); alert('已複製');
         }
         function openItdogModal() { document.getElementById('itdog-modal').style.display='flex'; }
-        
-        async function copyIPsForItdog() {
+        function copyIPsForItdog() {
             const ips = Array.from(document.querySelectorAll('.ip-address')).map(el => el.innerText).join('\\n');
-            if(ips) {
-                navigator.clipboard.writeText(ips);
-                window.open('https://www.itdog.cn/batch_tcping/', '_blank');
-            } else alert('無 IP 可複製');
+            if(ips) { navigator.clipboard.writeText(ips); window.open('https://www.itdog.cn/batch_tcping/', '_blank'); }
         }
     </script>
 </body>
@@ -737,101 +460,62 @@ export default {
     await env.IP_STORAGE.put('cloudflare_ips', JSON.stringify({
       ips: uniqueIPs, lastUpdated: new Date().toISOString(), count: uniqueIPs.length, sources: results
     }));
-    return jsonResponse({ 
-        success: true, 
-        duration: (Date.now()-start)+'ms', 
-        totalIPs: uniqueIPs.length
-    });
+    return jsonResponse({ success: true, duration: (Date.now()-start)+'ms', totalIPs: uniqueIPs.length });
   }
 
-  // 上傳前端測速結果 (寫入獨立 Key: browser_fast_ips)
   async function handleUploadResults(env, request) {
       if (!await verifyAdmin(request, env)) return jsonResponse({ error: '需要權限' }, 401);
       try {
           const { fastIPs } = await request.json();
           if (!fastIPs || !Array.isArray(fastIPs)) return jsonResponse({ error: '無效數據' }, 400);
-          
           await env.IP_STORAGE.put('browser_fast_ips', JSON.stringify({
-              fastIPs: fastIPs,
-              lastTested: new Date().toISOString(),
-              count: fastIPs.length,
-              source: 'browser_upload'
+              fastIPs: fastIPs, lastTested: new Date().toISOString(), count: fastIPs.length, source: 'browser_upload'
           }));
-          
           return jsonResponse({ success: true });
-      } catch (e) {
-          return jsonResponse({ error: e.message }, 500);
-      }
+      } catch (e) { return jsonResponse({ error: e.message }, 500); }
   }
 
-  // 獲取後端自動測速結果文本 (已公開)
+  // 用戶 IP 查詢
+  async function handleUserIP(request) {
+    const cf = request.cf;
+    const ip = request.headers.get('CF-Connecting-IP');
+    return jsonResponse({
+        ip: ip,
+        country: cf ? cf.country : 'UNK',
+        city: cf ? cf.city : '',
+        asn: cf ? cf.asn : '',
+        colo: cf ? cf.colo : ''
+    });
+  }
+
+  // 數據讀取 (公開)
   async function handleGetFastIPsText(env, request) {
-    // 移除權限驗證：if (!await verifyAdmin(request, env)) ...
     const url = new URL(request.url);
     const format = url.searchParams.get('format');
     const data = await getStoredSpeedIPs(env);
     const list = data.fastIPs || [];
-    
-    let txt = '';
-    if (format === 'ip') {
-        txt = list.map(i => i.ip).join('\n');
-    } else {
-        txt = list.map(i => `${i.ip}#${i.colo||'UNK'}:${i.latency}ms`).join('\n');
-    }
-    return new Response(txt, { headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Content-Disposition': 'inline; filename="fast_ips.txt"' } });
+    let txt = format === 'ip' ? list.map(i => i.ip).join('\n') : list.map(i => `${i.ip}#${i.colo||'UNK'}:${i.latency}ms`).join('\n');
+    return new Response(txt, { headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
   }
 
-  // 獲取瀏覽器測速結果文本 (已公開)
   async function handleGetBrowserIPsText(env, request) {
-    // 移除權限驗證
     const url = new URL(request.url);
     const format = url.searchParams.get('format');
     const data = await getStoredBrowserIPs(env);
     const list = data.fastIPs || [];
-    
-    let txt = '';
-    if (format === 'ip') {
-        txt = list.map(i => i.ip).join('\n');
-    } else {
-        txt = list.map(i => `${i.ip}#${i.colo||'UNK'}:${i.latency}ms`).join('\n');
-    }
-    return new Response(txt, { headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Content-Disposition': 'inline; filename="browser_speedtest.txt"' } });
+    let txt = format === 'ip' ? list.map(i => i.ip).join('\n') : list.map(i => `${i.ip}#${i.colo||'UNK'}:${i.latency}ms`).join('\n');
+    return new Response(txt, { headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
   }
 
-  // 獲取後端優選 IP (JSON) - 已公開
-  async function handleGetFastIPs(env, request) { 
-      // 移除權限驗證
-      return jsonResponse(await getStoredSpeedIPs(env)); 
-  }
-  
-  // 獲取所有 IP (TXT) - 已公開
-  async function handleGetIPs(env, request) { 
-      // 移除權限驗證
-      const d = await getStoredIPs(env); 
-      return new Response(d.ips.join('\n'), { headers: {'Content-Type': 'text/plain'} }); 
-  }
-  
-  // 獲取所有 IP (JSON) - 已公開
-  async function handleRawIPs(env, request) { 
-      // 移除權限驗證
-      return jsonResponse(await getStoredIPs(env)); 
-  }
-  
-  // ITDog 數據接口 - 已公開
-  async function handleItdogData(env, request) { 
-      // 移除權限驗證
-      const d = await getStoredSpeedIPs(env); 
-      return jsonResponse({ ips: (d.fastIPs||[]).map(i => i.ip) }); 
-  }
+  async function handleGetFastIPs(env, request) { return jsonResponse(await getStoredSpeedIPs(env)); }
+  async function handleGetIPs(env, request) { const d = await getStoredIPs(env); return new Response(d.ips.join('\n'), { headers: {'Content-Type': 'text/plain'} }); }
+  async function handleRawIPs(env, request) { return jsonResponse(await getStoredIPs(env)); }
+  async function handleItdogData(env, request) { const d = await getStoredSpeedIPs(env); return jsonResponse({ ips: (d.fastIPs||[]).map(i => i.ip) }); }
 
-  // 後端自動測速 (寫入 cloudflare_fast_ips)
   async function autoSpeedTestAndStore(env, ips) {
     if (!ips || !ips.length) return null;
     let randomIPs = [...ips];
-    for (let i = randomIPs.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [randomIPs[i], randomIPs[j]] = [randomIPs[j], randomIPs[i]];
-    }
+    for (let i = randomIPs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [randomIPs[i], randomIPs[j]] = [randomIPs[j], randomIPs[i]]; }
     const targets = randomIPs.slice(0, AUTO_TEST_MAX_IPS);
     const results = [];
     const BATCH = 5;
@@ -839,18 +523,12 @@ export default {
       const batch = targets.slice(i, i + BATCH);
       const promises = batch.map(ip => testIPSpeed(ip));
       const outcomes = await Promise.allSettled(promises);
-      for (const out of outcomes) {
-        if (out.status === 'fulfilled' && out.value.success) {
-            results.push({ ip: out.value.ip, latency: Math.round(out.value.latency), colo: out.value.colo });
-        }
-      }
+      for (const out of outcomes) { if (out.status === 'fulfilled' && out.value.success) results.push({ ip: out.value.ip, latency: Math.round(out.value.latency), colo: out.value.colo }); }
       if (i + BATCH < targets.length) await new Promise(r => setTimeout(r, 200));
     }
     results.sort((a, b) => a.latency - b.latency);
     const fastIPs = results.slice(0, FAST_IP_COUNT);
-    await env.IP_STORAGE.put('cloudflare_fast_ips', JSON.stringify({
-      fastIPs, lastTested: new Date().toISOString(), count: fastIPs.length, source: 'backend_auto'
-    }));
+    await env.IP_STORAGE.put('cloudflare_fast_ips', JSON.stringify({ fastIPs, lastTested: new Date().toISOString(), count: fastIPs.length, source: 'backend_auto' }));
   }
 
   // --- 通用函數 ---
@@ -864,8 +542,7 @@ export default {
       if (!response.ok) throw new Error(response.statusText);
       await response.text(); 
       const ray = response.headers.get('cf-ray');
-      const colo = ray ? ray.split('-').pop() : null;
-      return jsonResponse({ success: true, ip, colo, time: new Date() });
+      return jsonResponse({ success: true, ip, colo: ray ? ray.split('-').pop() : null, time: new Date() });
     } catch (error) { return jsonResponse({ success: false, ip, error: error.message }, 200); }
   }
 
@@ -873,12 +550,10 @@ export default {
     try {
       const start = Date.now();
       const res = await fetch(`https://speed.cloudflare.com/__down?bytes=1000`, { headers: { 'Host': 'speed.cloudflare.com' }, cf: { resolveOverride: ip }, signal: AbortSignal.timeout(5000) });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      if (!res.ok) throw new Error('HTTP Error: ' + res.status + ' ' + res.statusText);
       await res.text();
-      const latency = Date.now() - start;
       const ray = res.headers.get('cf-ray');
-      const colo = ray ? ray.split('-').pop() : null;
-      return { success: true, ip, latency, colo };
+      return { success: true, ip, latency: Date.now() - start, colo: ray ? ray.split('-').pop() : null };
     } catch (e) { return { success: false, ip, error: e.message }; }
   }
 
