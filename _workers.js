@@ -1,7 +1,6 @@
-// V3.2.7 精簡儀表板版：
-// 1. 移除 IP 檢測卡片 (Google/Cloudflare IP 等)
-// 2. 僅保留 HTTP 連通性測試 (延遲檢測)
-// 3. 保持亮色主題與自動刷新
+// V3.2.9 配色優化版：
+// 1. UI 優化：ITDog 按鈕改為 "深粉紅色" (Deep Pink)，解決顏色太淺看不清的問題
+// 2. 保持 V3.2.7 的精簡儀表板與 V3.2.6 的 API 修復
 
 // --- 設定區域 ---
 const FAST_IP_COUNT = 25; // 優質 IP 數量
@@ -102,7 +101,7 @@ export default {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloudflare 優選 IP 測速平台 (V3.2.7)</title>
+    <title>Cloudflare 優選 IP 測速平台 (V3.2.9)</title>
     <style>
         :root { --primary: #3b82f6; --bg-card: #ffffff; --bg-inner: #f8fafc; --border: #e2e8f0; --text-main: #334155; --text-sub: #64748b; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -129,7 +128,7 @@ export default {
         @media (max-width: 1024px) { .latency-row { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 600px) { .latency-row { grid-template-columns: 1fr; gap: 10px; } .header { flex-direction: column; text-align: center; gap: 10px; } }
 
-        /* 其他元件 */
+        /* 統計與按鈕 */
         .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 24px; }
         .stat { background: var(--bg-inner); padding: 16px; border-radius: 12px; text-align: center; border: 1px solid var(--border); }
         .stat-value { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
@@ -138,7 +137,15 @@ export default {
         .button { padding: 10px 18px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; background: var(--primary); color: white; display: inline-flex; align-items: center; gap: 6px; font-size: 0.95rem; text-decoration: none; height: 42px; }
         .button:hover { background: #2563eb; transform: translateY(-1px); }
         .button:disabled { opacity: 0.6; cursor: not-allowed; }
-        .button-success { background: #10b981; } .button-secondary { background: white; color: #475569; border: 1px solid #cbd5e1; } .button-purple { background: #8b5cf6; } .button-warning { background: #f59e0b; }
+        
+        /* 按鈕顏色定義 */
+        .button-success { background: #10b981; } .button-success:hover { background: #059669; }
+        .button-secondary { background: white; color: #475569; border: 1px solid #cbd5e1; } .button-secondary:hover { background: #f1f5f9; }
+        .button-purple { background: #8b5cf6; } .button-purple:hover { background: #7c3aed; }
+        .button-warning { background: #f59e0b; } .button-warning:hover { background: #d97706; }
+        /* 新增：深粉色 ITDog 按鈕 */
+        .button-pink { background: #db2777; } .button-pink:hover { background: #be185d; }
+        .button-slate { background: #64748b; } .button-slate:hover { background: #475569; }
 
         .ip-list { max-height: 500px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; }
         .ip-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: white; }
@@ -176,7 +183,7 @@ export default {
 
     <div class="container">
         <div class="header">
-            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.2.7</p></div>
+            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.2.9</p></div>
             <div><a href="https://github.com/sammy0101/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a></div>
         </div>
 
@@ -247,8 +254,8 @@ export default {
                         <a onclick="copyApiUrl('all')">📦 複製完整 IP 庫 API</a>
                     </div>
                 </div>
-                <button class="button" onclick="openItdogModal()" style="background: #8b5cf6;">🌐 ITDog 測速</button>
-                <button class="button button-secondary" onclick="openTokenModal()">🔑 Token 管理</button>
+                <button class="button button-pink" onclick="openItdogModal()">🌐 ITDog 測速</button>
+                <button class="button button-slate" onclick="openTokenModal()">🔑 Token 管理</button>
             </div>
             <div id="log-box" class="log-box"></div>
             ${tokenConfig ? `<div style="margin-top: 15px; padding: 10px; background: #f1f5f9; border-radius: 8px; font-size: 0.85rem;"><strong>當前 Token:</strong> <span style="font-family:monospace; background:white; padding:2px 6px; border-radius:4px;">${tokenConfig.token}</span></div>` : ''}
