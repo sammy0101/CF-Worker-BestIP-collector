@@ -5,7 +5,7 @@
 
 
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-3.1.11-blue)
+![Version](https://img.shields.io/badge/version-3.3.2-blue)
 
 ## ✨ 主要功能
 
