@@ -3,25 +3,27 @@
 基於 Cloudflare Worker 與 KV Storage 構建的自動化優選 IP 收集、測速與分發平台。
 集成了後端自動測速、瀏覽器端真實延遲測試、以及可視化的管理後台。
 
+> **當前版本**: V3.3.2
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Version](https://img.shields.io/badge/version-3.3.2-blue)
 
 ## ✨ 主要功能
 
+*   **🌍 全球機房中文化**: 自動將全球 100+ 個 Cloudflare 機房代碼 (如 HKG, TPE, LAX, SJC) 轉換為繁體中文城市名，API、下載文件與線上查看同步支援。
+*   **🎨 現代化 UI 設計**:
+    *   **精簡儀表板**: 自動刷新 HTTP 連通性測試 (GitHub, OpenAI, Bilibili 等)，即時掌握網路狀況。
+    *   **多彩按鈕**: 清晰的功能分區與視覺優化，操作直觀。
+    *   **響應式佈局**: 完美支援手機與電腦瀏覽。
 *   **☁️ 自動化後端更新**: 利用 Cron Triggers 定時從外部數據源 (GitHub) 拉取 IP 並在 Worker 後端進行可用性與速度測試。
 *   **⚡ 瀏覽器端測速**: 在管理後台可直接進行瀏覽器端的真實延遲測試，結果更貼近用戶實際體驗。
 *   **📡 智能路由系統**: 支援子域名路由，訪問不同子域名自動返回對應數據（無需 Token 即可公開訂閱）：
     *   `fast.xxx`: 返回後端測速篩選的優選 IP
     *   `browser.xxx`: 返回瀏覽器端實測的優選 IP
     *   `all.xxx`: 返回完整的 IP 庫
-*   **🔐 安全管理後台**:
-    *   支援密碼登入保護。
-    *   Token 管理系統（用於 API 寫入權限控制）。
-    *   查看系統狀態、IP 總數、更新時間。
+*   **🔐 安全管理後台**: 支援密碼登入保護與 Token 權限管理。
 *   **🔌 便捷 API 集成**: 提供純淨的 API 連結複製功能，方便導入 Surge, Clash, Sing-box 等工具。
-*   **📊 端口資訊顯示**: 主頁面清晰列出 Cloudflare 支援的 HTTP/HTTPS 端口
-*   **💾 KV 持久化存儲**: 數據存儲在 Cloudflare KV 中，確保快速讀取。
+*   **📊 端口資訊顯示**: 主頁面清晰列出 Cloudflare 支援的 HTTP/HTTPS 端口。
 
 ## 🛠️ 部署指南
 
@@ -105,3 +107,6 @@
 
 ## ⚠️ 免責聲明
 本項目僅供學習與技術研究使用。請勿將其用於任何非法用途。IP 來源取自網絡公開資源，本項目不保證 IP 的可用性與速度。
+
+---
+*Based on CF-Worker-BestIP-collector V3.3.2*
