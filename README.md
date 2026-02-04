@@ -3,7 +3,7 @@
 基於 Cloudflare Worker 與 KV Storage 構建的自動化優選 IP 收集、測速與分發平台。
 集成了後端自動測速、瀏覽器端真實延遲測試、以及可視化的管理後台。
 
-> **當前版本**: V3.3.4
+> **當前版本**: V3.3.7
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Version](https://img.shields.io/badge/version-3.3.2-blue)
@@ -109,4 +109,4 @@
 本項目僅供學習與技術研究使用。請勿將其用於任何非法用途。IP 來源取自網絡公開資源，本項目不保證 IP 的可用性與速度。
 
 ---
-*Based on CF-Worker-BestIP-collector V3.3.4*
+*Based on CF-Worker-BestIP-collector V3.3.7*
