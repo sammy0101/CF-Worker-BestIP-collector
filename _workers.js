@@ -1,7 +1,8 @@
-// V3.3.8 機房大全補完版：
-// 1. 修正：補上 SLC (鹽湖城)
-// 2. 擴充：內建全球 200+ 個 Cloudflare 機房中文對照表，大幅減少未翻譯情況
-// 3. 保持 V3.3.7 所有功能 (全域熱鍵、自動登入、精簡儀表板)
+// V3.3.13 完美可視化版：
+// 1. 升級：立即更新庫採用「前端調度、後端測速」架構，完美顯示進度條，且測出真實後端延遲
+// 2. 修復：解除 CIDR 展開限制，IP 總數回歸 3500+
+// 3. 智慧儲存：後端測速與本機測速結果分別獨立保存
+// 4. 保持 V3.3.12 的全球機房中文翻譯、全域熱鍵、精簡儀表板
 
 // --- 設定區域 ---
 const FAST_IP_COUNT = 25; // 優質 IP 數量
@@ -12,38 +13,16 @@ const CIDR_SOURCE_URLS = [
     'https://raw.githubusercontent.com/cmliu/cmliu/refs/heads/main/CF-CIDR.txt'
 ];
 
-// 全球機房代碼對照表 (超級擴充版)
+// 全球機房代碼對照表 (全域變數)
 const COLO_MAP = {
-    // 亞洲 - 東亞
-    'HKG': '香港', 'TPE': '台北', 'NRT': '東京', 'KIX': '大阪', 'ICN': '首爾', 'FUK': '福岡', 'OKA': '沖繩', 'CTS': '札幌', 'KHH': '高雄', 'NGO': '名古屋',
-    // 亞洲 - 東南亞
-    'SIN': '新加坡', 'KUL': '吉隆坡', 'BKK': '曼谷', 'MNL': '馬尼拉', 'SGN': '胡志明市', 'HAN': '河內', 'CGK': '雅加達', 'KNO': '棉蘭', 'DPS': '峇里島', 'PNH': '金邊', 'RGN': '仰光', 'VTE': '永珍', 'BWN': '汶萊', 'JOG': '日惹', 'CEB': '宿霧',
-    // 亞洲 - 南亞/中亞/西亞
-    'BOM': '孟買', 'DEL': '德里', 'MAA': '清奈', 'HYD': '海得拉巴', 'BLR': '班加羅爾', 'CCU': '班加羅爾', 'COK': '柯欽', 'CMB': '可倫坡', 'KTM': '可倫坡', 'DAC': '達卡', 'ISB': '加德滿都', 'KHI': '卡拉奇', 'LHE': '拉合爾', 'MLE': '馬累', 'KBL': '喀布爾', 'ALA': '阿拉木圖', 'TAS': '塔什干', 'FRU': '比什凱克',
-    // 北美 - 美國 (西岸/山區)
-    'LAX': '洛杉磯', 'SJC': '聖荷西', 'SFO': '舊金山', 'SEA': '西雅圖', 'PDX': '波特蘭', 'SMF': '沙加緬度', 'SAN': '聖地牙哥', 'LAS': '拉斯維加斯', 'PHX': '鳳凰城', 'SLC': '鹽湖城', 'DEN': '丹佛', 'ABQ': '阿布奎基', 'BOI': '波夕', 'HNL': '火奴魯魯',
-    // 北美 - 美國 (中部/南部)
-    'ORD': '芝加哥', 'DFW': '達拉斯', 'IAH': '休士頓', 'AUS': '奧斯汀', 'SAT': '聖安東尼奧', 'MCI': '堪薩斯城', 'STL': '聖路易斯', 'MSP': '明尼阿波利斯', 'OMA': '奧馬哈', 'OKC': '奧克拉荷馬城', 'MSY': '紐奧良', 'BNA': '納許維爾', 'MEM': '曼非斯',
-    // 北美 - 美國 (東岸/東北)
-    'JFK': '紐約', 'EWR': '紐華克', 'LGA': '紐約', 'IAD': '華盛頓', 'DCA': '華盛頓', 'BOS': '波士頓', 'PHL': '費城', 'DTW': '底特律', 'PIT': '匹茲堡', 'CLE': '匹茲堡', 'CMH': '克里夫蘭', 'IND': '哥倫布', 'BUF': '水牛城', 'BWI': '哥倫布',
-    // 北美 - 美國 (東南)
-    'MIA': '邁阿密', 'ATL': '亞特蘭大', 'TPA': '坦帕', 'MCO': '奧蘭多', 'JAX': '傑克遜維爾', 'FLL': '勞德代爾堡', 'CLT': '夏洛特', 'RDU': '羅里', 'RIC': '羅里', 'ORF': '諾福克',
-    // 北美 - 加拿大
-    'YVR': '溫哥華', 'YYZ': '多倫多', 'YUL': '蒙特婁', 'YYC': '卡加利', 'YEG': '卡加利', 'YWG': '愛德蒙頓', 'YOW': '溫尼伯', 'YHZ': '哈利法克斯', 'YQB': '渥太華',
-    // 歐洲 - 西歐/北歐
-    'LHR': '倫敦', 'AMS': '阿姆斯特丹', 'FRA': '法蘭克福', 'CDG': '巴黎', 'ZRH': '蘇黎世', 'BRU': '布魯塞爾', 'DUB': '都柏林', 'MAN': '曼徹斯特', 'EDI': '曼徹斯特', 'GLA': '愛丁堡', 'CWL': '格拉斯哥', 'BFS': '貝爾法斯特', 'LUX': '盧森堡', 'GVA': '日內瓦', 'VIE': '維也納', 'MUC': '慕尼黑', 'TXL': '柏林', 'BER': '柏林', 'HAM': '漢堡', 'DUS': '杜塞道夫', 'STR': '斯圖加特', 'CPH': '哥本哈根', 'ARN': '斯德哥爾摩', 'OSL': '奧斯陸', 'HEL': '赫爾辛基', 'KEF': '雷克雅維克',
-    // 歐洲 - 南歐/東歐
-    'MAD': '馬德里', 'BCN': '巴塞隆納', 'VLC': '瓦倫西亞', 'AGP': '馬拉加', 'LIS': '里斯本', 'OPO': '波多', 'FCO': '羅馬', 'MXP': '米蘭', 'VCE': '威尼斯', 'NAP': '拿坡里', 'PMO': '巴勒莫', 'ATH': '雅典', 'SKG': '塞薩洛尼基', 'IST': '伊斯坦堡', 'WAW': '華沙', 'PRG': '布拉格', 'BUD': '布達佩斯', 'OTP': '布加勒斯特', 'SOF': '索菲亞', 'BEG': '索菲亞', 'ZAG': '貝爾格勒', 'TIA': '地拉那', 'KIV': '奇西瑙', 'KBP': '基輔',
-    // 大洋洲
-    'SYD': '雪梨', 'MEL': '墨爾本', 'BNE': '布里斯本', 'PER': '伯斯', 'ADL': '阿得雷德', 'AKL': '奧克蘭', 'CHC': '基督城', 'CBR': '坎培拉', 'HBA': '荷巴特', 'NOU': '努美阿', 'NAN': '楠迪', 'POM': '莫士比港',
-    // 南美洲
-    'GRU': '聖保羅', 'GIG': '里約熱內盧', 'EZE': '布宜諾斯艾利斯', 'SCL': '聖地亞哥', 'BOG': '波哥大', 'LIM': '利馬', 'UIO': '基多', 'MDE': '麥德林', 'CCS': '卡拉卡斯', 'CLO': '卡利', 'GYE': '瓜亞基爾', 'ASU': '亞松森', 'MVD': '亞松森', 'MGA': '馬拿瓜',
-    // 中美洲/加勒比海
-    'MEX': '墨西哥城', 'QRO': '克雷塔羅', 'GDL': '瓜達拉哈拉', 'MTY': '蒙特雷', 'PTY': '巴拿馬城', 'SJO': '聖荷西(哥斯大黎加)', 'SAL': '聖薩爾瓦多', 'GUA': '瓜地馬拉城', 'KIN': '京斯敦', 'SDQ': '聖多明哥', 'SJU': '聖胡安', 'PAP': '太子港',
-    // 中東
-    'DXB': '杜拜', 'DOH': '杜哈', 'MCT': '馬斯喀特', 'KWI': '科威特', 'BAH': '巴林', 'RUH': '利雅德', 'JED': '吉達', 'DMM': '達曼', 'MED': '麥地那', 'AMM': '安曼', 'TLV': '特拉維夫', 'BEY': '貝魯特', 'EBL': '艾比爾', 'BGW': '巴格達', 'BAS': '巴斯拉',
-    // 非洲
-    'JNB': '約翰尼斯堡', 'CPT': '開普敦', 'DUR': '德班', 'CAI': '開羅', 'CMN': '卡薩布蘭卡', 'TUN': '突尼斯', 'ALG': '阿爾及爾', 'LOS': '拉哥斯', 'ACC': '阿克拉', 'NBO': '奈洛比', 'MBA': '蒙巴薩', 'DAR': '達累斯薩拉姆', 'KGL': '吉佳利', 'EBB': '恩德培', 'ADD': '阿迪斯阿貝巴', 'DKR': '達卡', 'ABJ': '阿必尚', 'LAD': '羅安達', 'MPM': '馬布多', 'HRE': '哈拉雷', 'LUN': '路易薩卡', 'MRU': '路易港', 'TNR': '安塔那那利佛'
+    'HKG': '香港', 'TPE': '台北', 'NRT': '東京', 'KIX': '大阪', 'ICN': '首爾', 'FUK': '福岡', 'OKA': '沖繩', 'CTS': '札幌', 'KHH': '高雄',
+    'SIN': '新加坡', 'KUL': '吉隆坡', 'BKK': '曼谷', 'MNL': '馬尼拉', 'SGN': '胡志明市', 'HAN': '河內', 'CGK': '雅加達', 'KNO': '棉蘭', 'DPS': '峇里島', 'PNH': '金邊', 'RGN': '仰光', 'VTE': '永珍',
+    'LAX': '洛杉磯', 'SJC': '聖荷西', 'SFO': '舊金山', 'SEA': '西雅圖', 'PDX': '波特蘭', 'YVR': '溫哥華', 'SAN': '聖地牙哥', 'PHX': '鳳凰城', 'LAS': '拉斯維加斯', 'SMF': '沙加緬度', 'SLC': '鹽湖城',
+    'JFK': '紐約', 'EWR': '紐華克', 'ORD': '芝加哥', 'IAD': '華盛頓', 'MIA': '邁阿密', 'DFW': '達拉斯', 'IAH': '休士頓', 'ATL': '亞特蘭大', 'YYZ': '多倫多', 'YUL': '蒙特婁', 'DEN': '丹佛', 'BOS': '波士頓', 'PHL': '費城', 'DTW': '底特律', 'MSP': '明尼阿波利斯',
+    'LHR': '倫敦', 'AMS': '阿姆斯特丹', 'FRA': '法蘭克福', 'CDG': '巴黎', 'MAD': '馬德里', 'ZRH': '蘇黎世', 'MXP': '米蘭', 'VIE': '維也納', 'ARN': '斯德哥爾摩', 'OSL': '奧斯陸', 'CPH': '哥本哈根', 'HEL': '赫爾辛基', 'WAW': '華沙', 'PRG': '布拉格', 'BUD': '布達佩斯', 'OTP': '布加勒斯特', 'ATH': '雅典', 'IST': '伊斯坦堡', 'DUB': '都柏林', 'BRU': '布魯塞爾', 'MUC': '慕尼黑', 'TXL': '柏林', 'LIS': '里斯本', 'FCO': '羅馬', 'BCN': '巴塞隆納',
+    'SYD': '雪梨', 'MEL': '墨爾本', 'BNE': '布里斯本', 'PER': '伯斯', 'AKL': '奧克蘭', 'ADL': '阿得雷德', 'CBR': '坎培拉',
+    'SCL': '聖地亞哥', 'GRU': '聖保羅', 'EZE': '布宜諾斯艾利斯', 'BOG': '波哥大', 'LIM': '利馬', 'GIG': '里約熱內盧', 'QRO': '克雷塔羅',
+    'DXB': '杜拜', 'TLV': '特拉維夫', 'DOH': '杜哈', 'JNB': '約翰尼斯堡', 'CPT': '開普敦', 'BOM': '孟買', 'DEL': '德里', 'MAA': '清奈', 'HYD': '海得拉巴', 'KWI': '科威特', 'RUH': '利雅德', 'MCT': '馬斯喀特'
 };
 // ----------------
 
@@ -68,7 +47,9 @@ export default {
         switch (path) {
           case '/': return await serveHTML(env, request);
           case '/update': if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405); return await handleUpdate(env, request); 
+          case '/backend-test': if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405); return await handleBackendTest(request, env); 
           case '/upload-results': if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405); return await handleUploadResults(env, request);
+          
           case '/ips': return await handleGetIPs(env, request);
           case '/ip.txt': return await handleGetIPs(env, request);
           case '/raw': return await handleRawIPs(env, request);
@@ -78,6 +59,7 @@ export default {
           case '/speedtest': return await handleSpeedTest(request, env);
           case '/itdog-data': return await handleItdogData(env, request);
           case '/my-ip': return handleUserIP(request);
+          
           case '/admin-login': return await handleAdminLogin(request, env);
           case '/admin-status': return await handleAdminStatus(env);
           case '/admin-logout': return await handleAdminLogout(env);
@@ -129,7 +111,7 @@ export default {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloudflare 優選 IP 測速平台 (V3.3.8)</title>
+    <title>Cloudflare 優選 IP 測速平台 (V3.3.13)</title>
     <style>
         :root { --primary: #3b82f6; --bg-card: #ffffff; --bg-inner: #f8fafc; --border: #e2e8f0; --text-main: #334155; --text-sub: #64748b; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -144,7 +126,6 @@ export default {
         .card { background: var(--bg-card); border-radius: 16px; padding: 24px; margin-bottom: 24px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
         .card h2 { font-size: 1.25rem; color: #1e293b; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; font-weight: 700; }
         
-        /* 延遲測試網格 */
         .latency-section { margin-top: 5px; }
         .latency-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
         .latency-box { background: var(--bg-inner); border: 1px solid var(--border); border-radius: 8px; padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; transition: .2s; }
@@ -156,7 +137,6 @@ export default {
         @media (max-width: 1024px) { .latency-row { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 600px) { .latency-row { grid-template-columns: 1fr; gap: 10px; } .header { flex-direction: column; text-align: center; gap: 10px; } }
 
-        /* 統計與按鈕 */
         .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 24px; }
         .stat { background: var(--bg-inner); padding: 16px; border-radius: 12px; text-align: center; border: 1px solid var(--border); }
         .stat-value { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
@@ -166,7 +146,6 @@ export default {
         .button:hover { background: #2563eb; transform: translateY(-1px); }
         .button:disabled { opacity: 0.6; cursor: not-allowed; }
         
-        /* 按鈕顏色定義 */
         .button-success { background: #10b981; } .button-success:hover { background: #059669; }
         .button-secondary { background: white; color: #475569; border: 1px solid #cbd5e1; } .button-secondary:hover { background: #f1f5f9; }
         .button-purple { background: #8b5cf6; } .button-purple:hover { background: #7c3aed; }
@@ -195,6 +174,10 @@ export default {
         .log-box { background: #1e293b; color: #10b981; font-family: monospace; font-size: 0.85rem; padding: 15px; border-radius: 12px; margin-top: 20px; height: 200px; overflow-y: auto; border: 1px solid #334155; display: none; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); z-index: 1000; justify-content: center; align-items: center; }
         .modal-content { background: white; padding: 24px; border-radius: 16px; width: 90%; max-width: 450px; }
+        
+        .lock-input, .modal-input { width: 100%; padding: 10px 12px; margin: 10px 0; border: 1px solid var(--border); border-radius: 8px; font-size: 1rem; outline: none; transition: .2s; }
+        .lock-input:focus, .modal-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+        
         .admin-indicator { position: fixed; top: 20px; right: 20px; z-index: 900; }
         .admin-badge { background: #10b981; color: white; padding: 8px 16px; border-radius: 20px; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .admin-badge.logged-out { background: #ef4444; }
@@ -210,11 +193,10 @@ export default {
 
     <div class="container">
         <div class="header">
-            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.3.8</p></div>
+            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.3.13</p></div>
             <div><a href="https://github.com/sammy0101/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a></div>
         </div>
 
-        <!-- 儀表板區域 (精簡版) -->
         <div class="card">
             <h2>🌍 當前網絡信息 <span style="font-size:0.8rem; color:#94a3b8; font-weight:400; margin-left:10px;">(每5秒自動刷新)</span></h2>
             
@@ -238,17 +220,21 @@ export default {
         </div>
 
         ${!isLoggedIn ? `
-        <!-- 鎖定畫面 -->
-        <div class="card lock-screen">
-            <div class="lock-icon">🔒</div>
-            <h2>系統已鎖定</h2>
-            <p style="color:#64748b; margin-bottom:30px;">請輸入管理員密碼以查看與下載數據。</p>
-            <input type="password" id="main-pass" class="lock-input" placeholder="輸入管理員密碼"><br>
-            <div style="margin-bottom: 20px;"><label style="cursor:pointer; color:#64748b; font-size:0.95rem;"><input type="checkbox" id="remember-pass-main" style="margin-right:6px;">記住密碼</label></div>
-            <button class="button" onclick="loginMain()">登入系統</button>
+        <div class="card lock-screen" style="text-align: center; padding: 40px 20px;">
+            <div style="font-size: 50px; margin-bottom: 10px;">🔒</div>
+            <h2 style="justify-content: center;">系統已鎖定</h2>
+            <p style="color:#64748b; margin-bottom:20px;">請輸入管理員密碼以查看與下載數據。</p>
+            <div style="max-width: 300px; margin: 0 auto; text-align: left;">
+                <input type="password" id="main-pass" class="lock-input" placeholder="輸入密碼">
+                <div style="margin: 10px 0 20px 0;">
+                    <label style="cursor:pointer; color:#64748b; font-size:0.95rem;">
+                        <input type="checkbox" id="remember-pass-main" style="margin-right:6px;">記住密碼
+                    </label>
+                </div>
+                <button class="button" onclick="loginMain()" style="width: 100%; justify-content: center;">登入系統</button>
+            </div>
         </div>
         ` : `
-        <!-- 主控台 -->
         <div class="card">
             <h2>📊 系統狀態</h2>
             <div class="stats">
@@ -257,8 +243,8 @@ export default {
                 <div class="stat"><div class="stat-value">${fastIPs.length}</div><div>優質 IP</div></div>
             </div>
             <div class="button-group">
-                <button class="button" onclick="updateIPs()" id="update-btn">🔄 立即更新庫</button>
-                <button class="button button-warning" onclick="startSpeedTest()" id="speedtest-btn">⚡ 瀏覽器測速</button>
+                <button class="button" onclick="updateIPsBackend()" id="update-btn">🔄 立即更新庫</button>
+                <button class="button button-warning" onclick="startBrowserSpeedTest()" id="speedtest-btn">⚡ 瀏覽器測速</button>
                 
                 <div class="dropdown"><button class="button button-success">🚀 下載中心 ▼</button>
                     <div class="dropdown-content">
@@ -302,17 +288,15 @@ export default {
         </div>
 
         <div class="card">
-            <div style="display:flex; justify-content:space-between; margin-bottom:15px;"><h2>🏆 優選 IP 列表</h2><button class="small-btn" onclick="copyAllFastIPs()">📋 複製所有 IP</button></div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:15px;"><h2 id="list-title">🏆 優選 IP 列表</h2><button class="small-btn" onclick="copyAllFastIPs()">📋 複製所有 IP</button></div>
             <div class="progress-bar" id="progress"><div class="progress-fill" id="progress-fill"></div></div>
             <div id="status-text" style="text-align:center; font-size:0.85rem; color:#64748b; margin-bottom:10px;"></div>
             <div class="ip-list" id="ip-list">
                 ${fastIPs.length > 0 ? fastIPs.map(item => {
                     const speedClass = item.latency < 200 ? 'speed-fast-bg' : '';
                     const colo = item.colo || 'UNK';
-                    // 使用全域 COLO_MAP 渲染
                     const cnName = COLO_MAP[colo] ? ` (${COLO_MAP[colo]})` : '';
                     const coloDisplay = colo + cnName;
-                    
                     const coloStyle = ['HKG', 'SJC', 'LAX', 'TPE'].includes(colo) ? 'background:#dcfce7; color:#166534;' : '';
                     return `<div class="ip-item" data-ip="${item.ip}"><div class="ip-info"><span class="colo-badge" style="${coloStyle}">${coloDisplay}</span><span class="ip-address">${item.ip}</span><span class="speed-result ${speedClass}">${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('${item.ip}')">複製</button></div>`;
                 }).join('') : '<p style="text-align:center; padding:30px; color:#94a3b8;">暫無數據，請點擊更新</p>'}
@@ -323,11 +307,23 @@ export default {
 
     <!-- Modals -->
     <div class="modal" id="itdog-modal"><div class="modal-content"><h3>🌐 ITDog 測速</h3><p style="margin-bottom:15px;">複製 IP 至 ITDog 測試。</p><div style="text-align:right;"><button class="button button-secondary" onclick="document.getElementById('itdog-modal').style.display='none'">關閉</button><button class="button" onclick="copyIPsForItdog()">📋 複製前往</button></div></div></div>
-    <div class="modal" id="login-modal"><div class="modal-content"><h3>🔐 管理員登入</h3><input type="password" id="admin-pass" placeholder="密碼" style="width:100%; padding:10px; margin:15px 0;"><button class="button" onclick="loginModal()">登入</button></div></div>
-    <div class="modal" id="token-modal"><div class="modal-content"><h3>⚙️ Token 設定</h3><input type="text" id="token-in" placeholder="Token" style="width:100%; padding:10px; margin:10px 0;"><div style="text-align:right;"><button class="button button-secondary" onclick="document.getElementById('token-modal').style.display='none'">取消</button><button class="button" onclick="saveToken()">儲存</button></div></div></div>
+    <div class="modal" id="login-modal"><div class="modal-content"><h3>🔐 管理員登入</h3><input type="password" id="admin-pass" class="modal-input" placeholder="輸入密碼"><div style="text-align:right; margin-top: 10px;"><button class="button" onclick="loginModal()">登入</button></div></div></div>
+    <div class="modal" id="token-modal">
+        <div class="modal-content">
+            <h3>⚙️ Token 設定</h3>
+            <input type="text" id="token-in" class="modal-input" placeholder="輸入新 Token (留空自動生成)">
+            <div style="margin-bottom:15px; font-size: 0.9rem; color: #475569; display: flex; align-items: center; gap: 10px;">
+                <label style="cursor:pointer;"><input type="checkbox" id="never-expire" style="margin-right:4px;"> 永不過期</label>
+                <div>或 <input type="number" id="expire-days" value="30" style="width:60px; padding:4px; border:1px solid #cbd5e1; border-radius:4px;"> 天後過期</div>
+            </div>
+            <div style="text-align:right;">
+                <button class="button button-secondary" onclick="document.getElementById('token-modal').style.display='none'">取消</button>
+                <button class="button" onclick="saveToken()">儲存</button>
+            </div>
+        </div>
+    </div>
 
     <script>
-        // 傳遞 COLO_MAP 給前端 JS
         const COLO_MAP = ${JSON.stringify(COLO_MAP)};
         let sessionId = '${sessionId || ''}';
         let isLoggedIn = ${isLoggedIn};
@@ -336,30 +332,19 @@ export default {
         const DISPLAY_COUNT = ${FAST_IP_COUNT};
 
         document.addEventListener('DOMContentLoaded', function() {
-            // 全域熱鍵監聽：處理 Enter 鍵登入
             document.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') {
                     if (!isLoggedIn) {
-                        // 在鎖定畫面：執行主登入
-                        e.preventDefault();
-                        loginMain();
+                        e.preventDefault(); loginMain();
                     } else {
-                        // 在管理畫面：檢查彈窗是否開啟
                         const loginModalEl = document.getElementById('login-modal');
-                        if (loginModalEl && loginModalEl.style.display !== 'none') {
-                            e.preventDefault();
-                            loginModal();
-                        }
+                        if (loginModalEl && loginModalEl.style.display !== 'none') { e.preventDefault(); loginModal(); }
                         const tokenModalEl = document.getElementById('token-modal');
-                        if (tokenModalEl && tokenModalEl.style.display !== 'none') {
-                            e.preventDefault();
-                            saveToken();
-                        }
+                        if (tokenModalEl && tokenModalEl.style.display !== 'none') { e.preventDefault(); saveToken(); }
                     }
                 }
             });
 
-            // 自動登入與密碼填充邏輯
             if (!isLoggedIn) {
                 const savedSession = localStorage.getItem('cf_session');
                 if (savedSession) {
@@ -373,12 +358,15 @@ export default {
                 const savedPass = localStorage.getItem('cf_admin_pass');
                 const passInput = document.getElementById('main-pass');
                 const checkbox = document.getElementById('remember-pass-main');
-                
                 if (savedPass && passInput) {
                     passInput.value = savedPass;
                     if(checkbox) checkbox.checked = true;
-                    // 自動聚焦，方便直接按 Enter
                     passInput.focus();
+                }
+            } else {
+                if(tokenConfig && tokenConfig.token) {
+                    const tokenIn = document.getElementById('token-in');
+                    if(tokenIn) tokenIn.value = tokenConfig.token;
                 }
             }
 
@@ -386,7 +374,6 @@ export default {
             setInterval(initDashboard, 5000); 
         });
 
-        // === 儀表板邏輯 ===
         function initDashboard() {
             checkLatency('https://github.githubassets.com/favicons/favicon.svg', 'lat-github');
             checkLatency('https://openai.com/favicon.ico', 'lat-openai');
@@ -451,7 +438,6 @@ export default {
                     localStorage.removeItem('cf_session');
                     localStorage.removeItem('cf_admin_pass');
                 }
-                
                 const url = new URL(window.location.href); 
                 url.searchParams.set('session', res.sessionId); 
                 window.location.href = url.toString();
@@ -466,28 +452,109 @@ export default {
             window.location.href = url.toString(); 
         }
 
-        async function updateIPs() {
+        // =====================================
+        // 核心：後端更新 + 前端調度可視化進度條
+        // =====================================
+        async function updateIPsBackend() {
             const btn = document.getElementById('update-btn'); btn.disabled = true; btn.innerText = '更新中...';
-            clearLog(); addLog('🚀 後端更新中...', 'info');
-            try { const res = await api('/update', 'POST'); if(res.success) { addLog('✅ 成功'); setTimeout(()=>location.reload(), 2000); } else addLog('❌ '+res.error, 'error'); } catch(e) { addLog('❌ '+e.message, 'error'); }
+            clearLog(); 
+            addLog('🚀 [步驟 1/2] 正在拉取並展開最新 IP 庫...', 'info');
+            
+            let allIps = [];
+            try { 
+                const res = await api('/update', 'POST'); 
+                if(res.success) { 
+                    addLog(\`✅ IP 庫拉取成功 (共 \${res.totalIPs} 個)\`); 
+                } else { 
+                    addLog('❌ 拉取失敗: '+res.error, 'error'); 
+                    btn.disabled = false; btn.innerText = '🔄 立即更新庫';
+                    return; 
+                } 
+            } catch(e) { 
+                addLog('❌ '+e.message, 'error'); 
+                btn.disabled = false; btn.innerText = '🔄 立即更新庫';
+                return; 
+            }
+
+            try { const res = await api('/raw'); allIps = res.ips && res.ips.length ? res.ips : []; } catch(e) {}
+            
+            if(!allIps.length) {
+                addLog('❌ 無 IP 可測', 'error');
+                btn.disabled = false; btn.innerText = '🔄 立即更新庫';
+                return;
+            }
+
+            addLog(\`🚀 [步驟 2/2] 開始由後端邊緣節點進行測速...\`, 'info');
+            for (let i = allIps.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [allIps[i], allIps[j]] = [allIps[j], allIps[i]]; }
+            const targets = allIps.slice(0, MAX_TEST);
+            
+            document.getElementById('progress').style.display = 'block';
+            let count = 0, validResults = [];
+            const BATCH_SIZE = 12; // 分批傳給後端，防超時
+
+            for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+                const batch = targets.slice(i, i + BATCH_SIZE);
+                document.getElementById('status-text').innerText = \`後端測速中 (\${Math.min(i+BATCH_SIZE, targets.length)}/\${targets.length})\`;
+
+                try {
+                    const res = await api('/backend-test', 'POST', { ips: batch });
+                    if (res.success && res.results) {
+                        res.results.forEach(r => {
+                            addLog(\`✅ [\${r.colo}] \${r.ip} - \${r.latency}ms\`, r.latency < 200 ? 'info' : 'normal');
+                            validResults.push(r);
+                        });
+                    }
+                } catch(e) {}
+
+                count += batch.length;
+                document.getElementById('progress-fill').style.width = (count/targets.length*100) + '%';
+            }
+
+            if(validResults.length) {
+                validResults.sort((a,b) => a.latency - b.latency);
+                const topResults = validResults.slice(0, DISPLAY_COUNT);
+                let newHtml = '';
+                topResults.forEach(item => {
+                    const colo = item.colo || 'UNK';
+                    const cnName = COLO_MAP[colo] ? \` (\${COLO_MAP[colo]})\` : '';
+                    const coloDisplay = colo + cnName;
+                    const coloStyle = ['HKG','SJC','LAX','TPE'].includes(item.colo) ? 'background:#dcfce7;color:#166534;' : '';
+                    newHtml += \`<div class="ip-item" data-ip="\${item.ip}"><div class="ip-info"><span class="colo-badge" style="\${coloStyle}">\${coloDisplay}</span><span class="ip-address">\${item.ip}</span><span class="speed-result">\${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('\${item.ip}')">複製</button></div>\`;
+                });
+                document.getElementById('ip-list').innerHTML = newHtml;
+                document.getElementById('list-title').innerText = '🏆 優選 IP 列表 (後端實測)';
+
+                try { 
+                    await api('/upload-results', 'POST', { fastIPs: topResults, type: 'backend' }); 
+                    addLog('✅ 後端測速結果已保存'); 
+                } catch(e){}
+            } else {
+                addLog('⚠️ 未測出有效 IP', 'warn');
+            }
+            
+            document.getElementById('progress').style.display = 'none';
+            document.getElementById('status-text').innerText = '後端測速完成';
             btn.disabled = false; btn.innerText = '🔄 立即更新庫';
         }
 
-        async function startSpeedTest() {
+        // =====================================
+        // 本機瀏覽器測速
+        // =====================================
+        async function startBrowserSpeedTest() {
             const allIpElements = document.querySelectorAll('.ip-item');
             let allIps = [];
             try { const res = await api('/raw'); allIps = res.ips && res.ips.length ? res.ips : []; } catch(e) {}
-            if(!allIps.length) allIps = Array.from(allIpElements).map(el.dataset.ip);
-            if(!allIps.length) return addLog('❌ 無 IP', 'error');
+            if(!allIps.length) allIps = Array.from(allIpElements).map(el => el.dataset.ip);
+            if(!allIps.length) return addLog('❌ 無 IP，請先點擊立即更新庫', 'error');
 
-            clearLog(); addLog(\`🚀 測速開始 (\${allIps.length} IPs)\`, 'info');
+            clearLog(); addLog(\`🚀 開始本機瀏覽器測速 (\${allIps.length} IPs)\`, 'info');
             for (let i = allIps.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [allIps[i], allIps[j]] = [allIps[j], allIps[i]]; }
             const targets = allIps.slice(0, MAX_TEST);
             
             document.getElementById('progress').style.display = 'block';
             let count = 0, results = [];
             for(const ip of targets) {
-                document.getElementById('status-text').innerText = \`測試 \${ip} (\${count+1}/\${targets.length})\`;
+                document.getElementById('status-text').innerText = \`本機測速中 \${ip} (\${count+1}/\${targets.length})\`;
                 try {
                     const start = performance.now();
                     const controller = new AbortController();
@@ -516,9 +583,15 @@ export default {
                     newHtml += \`<div class="ip-item" data-ip="\${item.ip}"><div class="ip-info"><span class="colo-badge" style="\${coloStyle}">\${coloDisplay}</span><span class="ip-address">\${item.ip}</span><span class="speed-result">\${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('\${item.ip}')">複製</button></div>\`;
                 });
                 document.getElementById('ip-list').innerHTML = newHtml;
-                try { await api('/upload-results', 'POST', { fastIPs: topResults }); addLog('✅ 結果已上傳'); } catch(e){}
+                document.getElementById('list-title').innerText = '🏆 優選 IP 列表 (本機實測)';
+
+                try { 
+                    await api('/upload-results', 'POST', { fastIPs: topResults, type: 'browser' }); 
+                    addLog('✅ 本機測速結果已保存'); 
+                } catch(e){}
             }
             document.getElementById('progress').style.display = 'none';
+            document.getElementById('status-text').innerText = '本機測速完成';
         }
 
         function downloadBrowserResults() {
@@ -569,46 +642,66 @@ export default {
     return jsonResponse({ success: true, duration: (Date.now()-start)+'ms', totalIPs: uniqueIPs.length });
   }
 
+  // 新增：處理前端發送的批次後端測速請求
+  async function handleBackendTest(request, env) {
+    if (!await verifyAdmin(request, env)) return jsonResponse({ error: '需要權限' }, 401);
+    try {
+        const body = await request.json();
+        const ips = body.ips;
+        if (!ips || !Array.isArray(ips)) return jsonResponse({ error: 'Invalid data' }, 400);
+
+        const targets = ips.slice(0, 15); // 限制每次最多測 15 個防超時
+        const promises = targets.map(ip => testIPSpeed(ip));
+        const outcomes = await Promise.allSettled(promises);
+        const results = [];
+        
+        for (const out of outcomes) {
+            if (out.status === 'fulfilled' && out.value && out.value.success) {
+                results.push({ ip: out.value.ip, latency: Math.round(out.value.latency), colo: out.value.colo });
+            }
+        }
+        return jsonResponse({ success: true, results });
+    } catch (e) {
+        return jsonResponse({ error: e.message }, 500);
+    }
+  }
+
   async function handleUploadResults(env, request) {
       if (!await verifyAdmin(request, env)) return jsonResponse({ error: '需要權限' }, 401);
       try {
-          const { fastIPs } = await request.json();
+          const body = await request.json();
+          const fastIPs = body.fastIPs;
+          const type = body.type || 'browser'; 
+          
           if (!fastIPs || !Array.isArray(fastIPs)) return jsonResponse({ error: '無效數據' }, 400);
-          await env.IP_STORAGE.put('browser_fast_ips', JSON.stringify({
-              fastIPs: fastIPs, lastTested: new Date().toISOString(), count: fastIPs.length, source: 'browser_upload'
+          
+          const targetKey = type === 'backend' ? 'cloudflare_fast_ips' : 'browser_fast_ips';
+          const sourceName = type === 'backend' ? 'frontend_triggered_backend' : 'browser_upload';
+
+          await env.IP_STORAGE.put(targetKey, JSON.stringify({
+              fastIPs: fastIPs, lastTested: new Date().toISOString(), count: fastIPs.length, source: sourceName
           }));
           return jsonResponse({ success: true });
       } catch (e) { return jsonResponse({ error: e.message }, 500); }
   }
 
-  // 用戶 IP 查詢
   async function handleUserIP(request) {
     const cf = request.cf;
     const ip = request.headers.get('CF-Connecting-IP');
     return jsonResponse({
-        ip: ip,
-        country: cf ? cf.country : 'UNK',
-        city: cf ? cf.city : '',
-        asn: cf ? cf.asn : '',
-        colo: cf ? cf.colo : ''
+        ip: ip, country: cf ? cf.country : 'UNK', city: cf ? cf.city : '', asn: cf ? cf.asn : '', colo: cf ? cf.colo : ''
     });
   }
 
-  // 數據讀取 (公開)
   async function handleGetFastIPsText(env, request) {
     const url = new URL(request.url);
     const format = url.searchParams.get('format');
     const data = await getStoredSpeedIPs(env);
     const list = data.fastIPs || [];
-    let txt = '';
-    if (format === 'ip') {
-        txt = list.map(i => i.ip).join('\n');
-    } else {
-        txt = list.map(i => {
-            const cn = COLO_MAP[i.colo] ? `(${COLO_MAP[i.colo]})` : '';
-            return `${i.ip}#${i.colo}${cn}:${i.latency}ms`;
-        }).join('\n');
-    }
+    let txt = format === 'ip' ? list.map(i => i.ip).join('\n') : list.map(i => {
+        const cn = COLO_MAP[i.colo] ? `(${COLO_MAP[i.colo]})` : '';
+        return `${i.ip}#${i.colo}${cn}:${i.latency}ms`;
+    }).join('\n');
     return new Response(txt, { headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
   }
 
@@ -617,15 +710,10 @@ export default {
     const format = url.searchParams.get('format');
     const data = await getStoredBrowserIPs(env);
     const list = data.fastIPs || [];
-    let txt = '';
-    if (format === 'ip') {
-        txt = list.map(i => i.ip).join('\n');
-    } else {
-        txt = list.map(i => {
-            const cn = COLO_MAP[i.colo] ? `(${COLO_MAP[i.colo]})` : '';
-            return `${i.ip}#${i.colo}${cn}:${i.latency}ms`;
-        }).join('\n');
-    }
+    let txt = format === 'ip' ? list.map(i => i.ip).join('\n') : list.map(i => {
+        const cn = COLO_MAP[i.colo] ? `(${COLO_MAP[i.colo]})` : '';
+        return `${i.ip}#${i.colo}${cn}:${i.latency}ms`;
+    }).join('\n');
     return new Response(txt, { headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
   }
 
@@ -645,7 +733,7 @@ export default {
       const batch = targets.slice(i, i + BATCH);
       const promises = batch.map(ip => testIPSpeed(ip));
       const outcomes = await Promise.allSettled(promises);
-      for (const out of outcomes) { if (out.status === 'fulfilled' && out.value.success) results.push({ ip: out.value.ip, latency: Math.round(out.value.latency), colo: out.value.colo }); }
+      for (const out of outcomes) { if (out.status === 'fulfilled' && out.value && out.value.success) results.push({ ip: out.value.ip, latency: Math.round(out.value.latency), colo: out.value.colo }); }
       if (i + BATCH < targets.length) await new Promise(r => setTimeout(r, 200));
     }
     results.sort((a, b) => a.latency - b.latency);
@@ -653,7 +741,6 @@ export default {
     await env.IP_STORAGE.put('cloudflare_fast_ips', JSON.stringify({ fastIPs, lastTested: new Date().toISOString(), count: fastIPs.length, source: 'backend_auto' }));
   }
 
-  // --- 通用函數 ---
   async function handleSpeedTest(request, env) {
     const url = new URL(request.url);
     const ip = url.searchParams.get('ip');
@@ -671,27 +758,55 @@ export default {
   async function testIPSpeed(ip) {
     try {
       const start = Date.now();
-      const res = await fetch(`https://speed.cloudflare.com/__down?bytes=1000`, { headers: { 'Host': 'speed.cloudflare.com' }, cf: { resolveOverride: ip }, signal: AbortSignal.timeout(5000) });
-      if (!res.ok) throw new Error('HTTP Error: ' + res.status + ' ' + res.statusText);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500); 
+      const res = await fetch(`https://speed.cloudflare.com/__down?bytes=1000`, { 
+          headers: { 'Host': 'speed.cloudflare.com' }, 
+          cf: { resolveOverride: ip }, 
+          signal: controller.signal 
+      });
+      clearTimeout(timeoutId);
+      if (!res.ok) throw new Error('HTTP Error: ' + res.status);
       await res.text();
       const ray = res.headers.get('cf-ray');
       return { success: true, ip, latency: Date.now() - start, colo: ray ? ray.split('-').pop() : null };
     } catch (e) { return { success: false, ip, error: e.message }; }
   }
 
+  function expandCIDR(cidr) { 
+      try { 
+          const [ip, m] = cidr.split('/'); 
+          const mask = parseInt(m); 
+          if(isNaN(mask)||mask>32) return [ip]; 
+          if(mask===32) return [ip]; 
+          const start = ipToNum(ip); 
+          const len = Math.pow(2, 32-mask); 
+          const res = []; 
+          const max = len > 256 ? 256 : len; 
+          for(let i=0; i<max; i++) {
+              res.push(numToIp(start + i));
+          }
+          return res; 
+      } catch { return []; } 
+  }
+
   async function updateAllIPs(env) {
     const urls = CIDR_SOURCE_URLS;
     const uniqueIPs = new Set();
     const results = [];
-    const cidrRegex = /\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?:\/(?:3[0-2]|[1-2]?[0-9]))?\b/gi;
+    const cidrRegex = /\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?:\/(?:[0-9]{1,2}))?\b/gi;
     for (const url of urls) {
         try {
             const txt = await fetchURLWithTimeout(url);
             const matches = txt.match(cidrRegex) || [];
             let count = 0;
-            matches.forEach(m => {
-                if(m.includes('/')) expandCIDR(m).forEach(ip => { if(isValidIPv4(ip)) { uniqueIPs.add(ip); count++; }});
-                else if(isValidIPv4(m)) { uniqueIPs.add(m); count++; }
+            const maxMatches = matches.slice(0, 3000); 
+            maxMatches.forEach(m => {
+                if(m.includes('/')) {
+                    expandCIDR(m).forEach(ip => { uniqueIPs.add(ip); count++; });
+                } else {
+                    uniqueIPs.add(m); count++; 
+                }
             });
             results.push({ name: url, status: 'success', count });
         } catch(e) { results.push({ name: url, status: 'error', error: e.message }); }
@@ -722,9 +837,9 @@ export default {
     if (request.method === 'GET') return jsonResponse({ tokenConfig: await getTokenConfig(env) });
     if (request.method === 'POST') {
         const { token, expiresDays, neverExpire } = await request.json();
-        if (!token) return jsonResponse({ error: 'Token不能為空' }, 400);
+        let newToken = token ? token.trim() : generateToken();
         let expiresDate = neverExpire ? new Date(Date.now() + 100*365*24*60*60*1000).toISOString() : new Date(Date.now() + expiresDays*24*60*60*1000).toISOString();
-        const config = { token: token.trim(), expires: expiresDate, createdAt: new Date().toISOString(), lastUsed: null, neverExpire: neverExpire||false };
+        const config = { token: newToken, expires: expiresDate, createdAt: new Date().toISOString(), lastUsed: null, neverExpire: neverExpire||false };
         await env.IP_STORAGE.put('token_config', JSON.stringify(config));
         return jsonResponse({ success: true, tokenConfig: config, message: 'Token更新成功' });
     }
@@ -756,7 +871,6 @@ export default {
   async function getStoredSpeedIPs(env) { try { return JSON.parse(await env.IP_STORAGE.get('cloudflare_fast_ips')) || {fastIPs:[]}; } catch { return {fastIPs:[]}; } }
   async function getStoredBrowserIPs(env) { try { return JSON.parse(await env.IP_STORAGE.get('browser_fast_ips')) || {fastIPs:[]}; } catch { return {fastIPs:[]}; } }
   
-  function expandCIDR(cidr) { try { const [ip, m] = cidr.split('/'); const mask = parseInt(m); if(isNaN(mask)||mask>32) return [ip]; if(mask===32) return [ip]; const start = ipToNum(ip); const len = Math.pow(2, 32-mask); const res = []; for(let i=0; i<(len>256?256:len); i++) res.push(numToIp(start+i)); return res; } catch { return []; } }
   function ipToNum(ip) { return ip.split('.').reduce((a,b) => (a<<8)+parseInt(b),0)>>>0; }
   function numToIp(n) { return [(n>>>24)&255, (n>>>16)&255, (n>>>8)&255, n&255].join('.'); }
   function isValidIPv4(ip) { return /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(ip); }
